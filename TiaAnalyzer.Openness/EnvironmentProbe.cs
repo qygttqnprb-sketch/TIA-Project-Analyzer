@@ -39,8 +39,4 @@ namespace TiaAnalyzer.Openness {
    new EnvironmentCheck{Name="Istanza dimostrativa",Status="MOCK",Detail="Linea confezionamento • progetto simulato in sola lettura"}
   }}; }
  }
- public sealed class MockTiaSession : IReadOnlyTiaSession {
-  public bool IsConnected {get{return true;}}
-  public string Description {get{return "MOCK connesso • Linea confezionamento • nessun collegamento reale";}}
- }
 }

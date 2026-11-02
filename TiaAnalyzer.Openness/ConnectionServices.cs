@@ -1,39 +1,67 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using TiaAnalyzer.Core;
 
 namespace TiaAnalyzer.Openness
 {
-    public sealed class SiemensConnectionService : ITiaConnectionService
+    // Owns only the handle returned by Attach, never a newly started TIA process.
+    public sealed class TiaConnectionService : ITiaConnectionService
     {
-        public bool CanConnect { get { return false; } }
-        public IReadOnlyTiaSession Connect()
+        private readonly ITiaBackend backend;
+        private readonly SerialWorker worker = new SerialWorker();
+        private IAttachedPortal attached;
+        private IReadOnlyList<TiaInstance> discovered = new List<TiaInstance>();
+        public TiaConnectionService(ITiaBackend backend) { this.backend = backend; }
+        public bool HasSession { get { return attached != null; } }
+        public bool IsAvailable { get { return backend.IsAvailable; } }
+        public Task<IReadOnlyList<TiaInstance>> DiscoverAsync()
         {
-            throw new NotSupportedException("Connessione Siemens non implementata in V0.1. Integrazione da verificare su Windows.");
-        }
-        public IReadOnlyList<ProjectComponent> GetComponents(IReadOnlyTiaSession session)
-        {
-            throw new NotSupportedException("Analisi reale non disponibile in V0.1.");
-        }
-    }
-
-    public sealed class DemoConnectionService : ITiaConnectionService
-    {
-        public bool CanConnect { get { return true; } }
-        public IReadOnlyTiaSession Connect() { return new MockTiaSession(); }
-        public IReadOnlyList<ProjectComponent> GetComponents(IReadOnlyTiaSession session)
-        {
-            if (!(session is MockTiaSession) || !session.IsConnected)
-                throw new InvalidOperationException("È richiesta una sessione dimostrativa.");
-            return new List<ProjectComponent>
+            return worker.Run(() =>
             {
-                new ProjectComponent { Name = "Linea confezionamento", Kind = "Progetto sintetico", Status = "DEMO" },
-                new ProjectComponent { Name = "PLC_Conveyor / CPU 1511-1 PN", Kind = "Controllore sintetico", Status = "DEMO" },
-                new ProjectComponent { Name = "Main [OB1]", Kind = "Blocco sintetico", Status = "DEMO" },
-                new ProjectComponent { Name = "ConveyorControl [FB10]", Kind = "Blocco sintetico", Status = "DEMO" },
-                new ProjectComponent { Name = "ConveyorData [DB10]", Kind = "Dati sintetici", Status = "DEMO" },
-                new ProjectComponent { Name = "HMI_Packaging", Kind = "Pannello sintetico", Status = "DEMO" }
-            }.AsReadOnly();
+                discovered = new List<TiaInstance>();
+                discovered = backend.Discover();
+                return discovered;
+            });
+        }
+        public Task<IReadOnlyList<ProjectComponent>> ConnectAsync(TiaInstance instance)
+        {
+            return worker.Run(() =>
+            {
+                if (attached != null) throw new InvalidOperationException("Disconnettere la sessione corrente prima di collegarsi.");
+                TiaInstance selected = null;
+                foreach (var candidate in discovered)
+                    if (instance != null && ReferenceEquals(candidate, instance)) selected = candidate;
+                if (selected == null) throw new TiaConnectionException(ConnectionFailure.InstanceUnavailable, "Selezionare un'istanza dall'ultimo rilevamento.");
+                IAttachedPortal pending = backend.Attach(selected);
+                if (pending == null) throw new TiaConnectionException(ConnectionFailure.Unexpected, "Attach non ha restituito una sessione.");
+                try
+                {
+                    var components = pending.ReadComponents();
+                    attached = pending;
+                    return components;
+                }
+                catch (Exception readError)
+                {
+                    try { pending.Dispose(); }
+                    catch (Exception releaseError) { attached = pending; throw new AggregateException("Lettura e rilascio della sessione non riusciti.", readError, releaseError); }
+                    throw;
+                }
+            });
+        }
+        public async Task ShutdownAsync()
+        {
+            await DisconnectAsync();
+            await worker.StopAsync();
+        }
+        public Task DisconnectAsync()
+        {
+            return worker.Run(() =>
+            {
+                // Retain the handle on a release failure so the user can retry.
+                if (attached != null) { attached.Dispose(); attached = null; }
+                return true;
+            });
         }
     }
 }

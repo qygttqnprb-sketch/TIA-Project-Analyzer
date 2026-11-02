@@ -1,25 +1,28 @@
-# TIA Project Analyzer · V0.1
+# TIA Project Analyzer · V0.2
 
-Applicazione Windows WPF, C# 7.3, .NET Framework 4.8, x64, per la futura analisi in sola lettura di progetti Siemens TIA Portal V21. Dashboard scura, diagnostica automatica, architettura MVVM e modalità dimostrativa con dati sintetici.
+Applicazione Windows WPF, C# 7.3, .NET Framework 4.8, x64. Dashboard scura MVVM per diagnostica e analisi in sola lettura delle istanze Siemens TIA Portal V21 già aperte, con adapter demo indipendente.
 
-**Integrazione Siemens non verificata.** V0.1 legge esclusivamente i metadati delle DLL installate. La connessione reale resta disabilitata anche quando le librerie sono presenti. Nessuna API per aprire, modificare, compilare, scaricare o salvare progetti PLC viene invocata.
+La V0.1 è stata compilata e avviata correttamente sul PC Windows dall'utente, con DLL V21 rilevate. **La connessione Siemens V0.2 non è stata compilata né verificata nel cloud: richiede compilazione e prova su Windows con TIA Portal V21.**
 
 ## Avvio su Windows
 
-Prerequisiti: Visual Studio con workload **Sviluppo desktop .NET**, targeting pack **.NET Framework 4.8** e SDK .NET compatibile con `.slnx` (SDK 10 usato per la compilazione cloud). Aprire `TIA-Project-Analyzer.slnx`, impostare `TiaAnalyzer.App` come progetto di avvio, scegliere `Debug | x64`, premere F5.
+Prerequisiti: Visual Studio con workload desktop .NET, targeting pack .NET Framework 4.8, SDK compatibile con `.slnx` (SDK 10 usato nel cloud). Aprire `TIA-Project-Analyzer.slnx`, selezionare `TiaAnalyzer.App`, Debug x64.
 
-Da Developer PowerShell:
+Build demo/diagnostica, adapter Siemens escluso per default:
 
 ```powershell
-MSBuild TIA-Project-Analyzer.slnx /restore /p:Configuration=Debug /p:Platform=x64
-powershell.exe -NoProfile -STA -File .\SmokeCheck.ps1
-# Facoltativo: richiede anche i metadati Siemens V21 corretti.
-powershell.exe -NoProfile -STA -File .\SmokeCheck.ps1 -RequireSiemens
+MSBuild TIA-Project-Analyzer.slnx /restore /t:Rebuild /p:Configuration=Debug /p:Platform=x64
 ```
 
-Lo smoke test base funziona anche senza Siemens; con `-RequireSiemens` richiede librerie V21 rilevabili. Nessuna modifica alla execution policy viene effettuata. Se gli script sono bloccati, eseguire i controlli manuali in [docs/WINDOWS-VALIDATION.md](docs/WINDOWS-VALIDATION.md).
+Build con adapter reale e DLL installate localmente:
 
-Percorso delle librerie sul PC Windows:
+```powershell
+MSBuild TIA-Project-Analyzer.slnx /restore /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /p:EnableSiemensOpenness=true
+```
+
+Per usare F5 con adapter reale abilitato, vedere il file locale `Directory.Build.props` documentato in [docs/OPENNESS-V21.md](docs/OPENNESS-V21.md), insieme a riferimenti, resolver e superficie API da verificare.
+
+Le DLL Siemens non vengono incluse nel repository né copiate nell'output. Reference locali con `Private=false`:
 
 ```text
 C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48
@@ -27,23 +30,28 @@ C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48
   Siemens.Engineering.Step7.dll
 ```
 
-Non copiare le DLL nel repository. Il probe verifica processo x64, directory, leggibilità dei metadati, nome assembly atteso e versione principale 21. La presenza delle DLL non dimostra autorizzazioni, compatibilità completa o accesso a un'istanza TIA.
+## Flusso esplicito di collegamento
 
-## Flusso V0.1
+1. All'avvio viene eseguita soltanto la diagnostica dei metadati. Nessun Attach automatico.
+2. Premere **Rileva istanze TIA / demo** per visualizzare PID, versione eseguibile, percorso e progetto associato se disponibile. Nessuna selezione automatica.
+3. Selezionare manualmente l'istanza. Per il reale, confermare l'uso di un progetto di prova e premere **Collega istanza selezionata**.
+4. Rispondere all'eventuale richiesta Openness nel dialogo Siemens. L'app non concede autorizzazioni automaticamente.
+5. Dopo Attach vengono letti esclusivamente i progetti già aperti, i dispositivi, gli elementi hardware e il software STEP 7 dove disponibile. La dashboard mostra progetto, percorso gerarchico, tipo e stato.
+6. **Disconnetti** rilascia il solo handle Attach. TIA Portal e i progetti già aperti devono restare attivi. Anche cambio modalità e chiusura della dashboard rilasciano le risorse possedute.
 
-All'avvio la diagnostica parte automaticamente. Ogni componente mostra stato e dettaglio. **Modalità dimostrativa** usa un probe indipendente e abilita **Connetti istanza dimostrativa**: vengono mostrati sei componenti sintetici, senza lettura di progetti reali. **Disconnetti demo** e il ritorno alla modalità reale svuotano sessione e componenti. Durante la verifica i comandi concorrenti e il cambio di modalità sono bloccati.
+La modalità dimostrativa segue lo stesso flusso di rilevamento/selezione, con sei componenti sintetici marcati DEMO e nessun accesso Siemens. Errori e rifiuti compaiono nello stato e nel log in memoria. Durante un'operazione il cambio modalità, la selezione e le altre operazioni sono bloccati. Prima di chiudere la dashboard completare l'eventuale autorizzazione Siemens in attesa.
 
-XML e ZIP sono predisposti come contratti e piani di esportazione (`manifest.xml`, `components.xml`, `diagnostics.xml`). I pulsanti restano disabilitati: non vengono creati file né archivi.
+Non sono implementati apertura automatica di progetti, modifica hardware, scrittura DB, compilazione PLC, download, accesso online, salvataggio o esportazione. XML/ZIP rimangono contratti futuri e pulsanti disabilitati.
 
-## Struttura
+## Architettura
 
-- `TiaAnalyzer.App`: View XAML, ViewModel osservabile, comandi asincroni e composizione dei servizi. Il code-behind contiene solo inizializzazione e ciclo di vita della finestra.
-- `TiaAnalyzer.Core`: contratti diagnostici, sessione in sola lettura e componenti analizzati.
-- `TiaAnalyzer.Openness`: probe metadati V21, adattatore reale non implementato, servizio demo.
-- `TiaAnalyzer.Export`: contratti e piani futuri XML/ZIP, nessuna scrittura.
-- `TiaAnalyzer.Checks`: controlli portabili dei sorgenti dei servizi e del ViewModel, senza framework di test aggiuntivi.
+- `TiaAnalyzer.App`: WPF/MVVM, comandi asincroni, selezione e consenso; nessun tipo Siemens nel ViewModel.
+- `TiaAnalyzer.Core`: DTO, contratti in sola lettura, categorie di errore e diagnostica in memoria.
+- `TiaAnalyzer.Openness`: coordinatore sessione e worker STA; `SiemensBackend.V21.cs` tipizzato condizionale, fallback esplicito senza DLL e `DemoBackend` separato.
+- `TiaAnalyzer.Export`: soli piani XML/ZIP, nessuna scrittura.
+- `TiaAnalyzer.Checks`: test portabili con backend simulati; non certificano runtime Windows net48, binding WPF o API Siemens.
 
-## Verifiche cloud
+## Verifiche
 
 ```bash
 dotnet build TIA-Project-Analyzer.slnx -c Debug -p:Platform=x64
@@ -51,4 +59,6 @@ dotnet build TIA-Project-Analyzer.slnx -c Release -p:Platform=x64
 dotnet run --project TiaAnalyzer.Checks/TiaAnalyzer.Checks.csproj
 ```
 
-I controlli portabili richiedono SDK .NET 10 ed eseguono i sorgenti collegati su runtime .NET 10. Coprono comandi, transizioni, errori del probe, stato concorrente, dati sintetici e contratti futuri; non sostituiscono la verifica del runtime Windows net48 o dei binding WPF. La compilazione cloud non certifica avvio grafico né integrazione Siemens. Vedere la checklist Windows per le verifiche ancora necessarie.
+Le build cloud compilano **solo il fallback** dell'adapter Siemens. I test collegano i sorgenti su runtime .NET 10 e coprono zero/più istanze, selezione, Attach simulato, rifiuto, errori, rilascio, retry, proprietà dell'handle e serializzazione.
+
+Su Windows: `powershell.exe -NoProfile -STA -File .\SmokeCheck.ps1` verifica i binding e il flusso demo; `-RequireSiemens` richiede anche metadati V21 validi ma non esegue Attach reale. Non modificare execution policy aziendali per eseguirlo. Seguire [docs/WINDOWS-VALIDATION.md](docs/WINDOWS-VALIDATION.md) per le prove reali iniziali su un progetto di test e per registrare gli esiti.

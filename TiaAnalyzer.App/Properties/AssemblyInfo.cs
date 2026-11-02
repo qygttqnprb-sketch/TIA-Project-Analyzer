@@ -8,7 +8,7 @@ using System.Windows;
 // set di attributi. Modificare i valori di questi attributi per modificare le informazioni
 // associate a un assembly.
 [assembly: AssemblyTitle("TiaAnalyzer.App")]
-[assembly: AssemblyDescription("TIA Project Analyzer V0.1 · diagnostica e dimostrazione in sola lettura")]
+[assembly: AssemblyDescription("TIA Project Analyzer V0.2 · diagnostica e dimostrazione in sola lettura")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("HP Inc.")]
 [assembly: AssemblyProduct("TiaAnalyzer.App")]
@@ -48,5 +48,5 @@ using System.Windows;
 //      Numero di build
 //      Revisione
 //
-[assembly: AssemblyVersion("0.1.0.0")]
-[assembly: AssemblyFileVersion("0.1.0.0")]
+[assembly: AssemblyVersion("0.2.0.0")]
+[assembly: AssemblyFileVersion("0.2.0.0")]

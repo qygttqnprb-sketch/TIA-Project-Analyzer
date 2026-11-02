@@ -5,3 +5,6 @@
 *.suo
 # Siemens binaries must remain in the local installation.
 Siemens*.dll
+
+# Local Windows build opt-in (Siemens references).
+/Directory.Build.props
