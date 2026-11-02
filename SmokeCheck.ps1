@@ -1,3 +1,4 @@
+param([switch]$RequireSiemens)
 $ErrorActionPreference = 'Stop'
 $output = Join-Path $PSScriptRoot 'TiaAnalyzer.App\bin\x64\Debug'
 Add-Type -AssemblyName PresentationFramework
@@ -7,9 +8,7 @@ foreach ($name in 'TiaAnalyzer.Core','TiaAnalyzer.Openness','TiaAnalyzer.Export'
 }
 $real = (New-Object TiaAnalyzer.Openness.SiemensEnvironmentProbe).Inspect()
 $real.Checks | Format-Table Name,Status,Detail -Wrap
-if (-not $real.Available) { throw 'Installed V21 environment check failed.' }
-$mock = (New-Object TiaAnalyzer.Openness.MockEnvironmentProbe).Inspect()
-if (-not $mock.Available -or $mock.Checks.Count -ne 3) { throw 'Mock report failed.' }
+if ($RequireSiemens -and -not $real.Available) { throw 'Installed V21 metadata check failed.' }
 $window = New-Object TiaAnalyzer.App.MainWindow
 $window.Show()
 function Pump-UntilIdle {
@@ -19,19 +18,30 @@ function Pump-UntilIdle {
         [void]$window.Dispatcher.BeginInvoke([Windows.Threading.DispatcherPriority]::Background, [Action]{ $frame.Continue = $false })
         [Windows.Threading.Dispatcher]::PushFrame($frame)
         if ([DateTime]::UtcNow -gt $deadline) { throw 'UI check timed out.' }
-    } while (-not $window.FindName('CheckButton').IsEnabled)
+    } while ($window.DataContext.IsBusy -or -not $window.FindName('CheckButton').IsEnabled)
 }
 try {
     Pump-UntilIdle
-    if ($window.FindName('Checks').Items.Count -ne 6) { throw 'Real UI results missing.' }
+    if ($window.FindName('Checks').Items.Count -ne 6) { throw 'Real diagnostics binding failed.' }
     if ($window.FindName('ConnectButton').IsEnabled) { throw 'Real connection must be disabled.' }
     $window.FindName('MockMode').IsChecked = $true
     Pump-UntilIdle
-    if ($window.FindName('Checks').Items.Count -ne 3) { throw 'Mock UI results missing.' }
-    $window.FindName('ConnectButton').RaiseEvent((New-Object Windows.RoutedEventArgs([Windows.Controls.Button]::ClickEvent)))
-    if ($window.FindName('SessionStatus').Text -notlike 'MOCK connesso*') { throw 'Mock connection failed.' }
+    if (-not $window.DataContext.IsDemo) { throw 'Mode binding failed.' }
+    if ($window.FindName('Checks').Items.Count -ne 3) { throw 'Demo diagnostic binding failed.' }
+    if (-not $window.FindName('ConnectButton').IsEnabled) { throw 'Demo connection must be enabled.' }
+    $window.FindName('ConnectButton').Command.Execute($null)
+    Pump-UntilIdle
+    if ($window.FindName('SessionStatus').Text -notlike 'MOCK connesso*') { throw 'Demo session binding failed.' }
+    if ($window.FindName('ComponentsList').Items.Count -ne 6) { throw 'Synthetic components binding failed.' }
+    $window.FindName('DisconnectButton').Command.Execute($null)
+    Pump-UntilIdle
+    if ($window.FindName('ComponentsList').Items.Count -ne 0) { throw 'Disconnect did not clear components.' }
+    $window.FindName('ConnectButton').Command.Execute($null)
     $window.FindName('MockMode').IsChecked = $false
     Pump-UntilIdle
     if ($window.FindName('SessionStatus').Text -ne 'Disconnesso') { throw 'Session was not reset.' }
-    Write-Output 'PASS: real metadata, WPF startup, mock switch, mock connection, session reset.'
+    if ($window.FindName('ComponentsList').Items.Count -ne 0) { throw 'Mode change left stale synthetic data.' }
+    if ($window.FindName('ConnectButton').IsEnabled) { throw 'Real connection enabled after mode change.' }
+    Write-Output 'PASS: diagnostics bindings, WPF startup, demo mode, synthetic components, disconnect and mode reset.'
+    Write-Output 'Siemens integration NOT validated. Optional metadata check does not establish API access.'
 } finally { $window.Close() }
