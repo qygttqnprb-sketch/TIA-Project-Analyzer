@@ -6,18 +6,23 @@ using TiaAnalyzer.Core;
 namespace TiaAnalyzer.Openness {
  public sealed class SiemensEnvironmentProbe : IEnvironmentProbe {
   public const string LibraryPath = @"C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48";
+  private readonly string libraryPath;
+  public SiemensEnvironmentProbe() : this(LibraryPath) {}
+  public SiemensEnvironmentProbe(string libraryPath) { this.libraryPath=libraryPath ?? throw new ArgumentNullException(nameof(libraryPath)); }
   public EnvironmentReport Inspect() {
    var checks = new List<EnvironmentCheck>();
    bool available = Environment.Is64BitProcess;
    checks.Add(new EnvironmentCheck {Name="Processo applicazione",Status=available?"OK":"ERRORE",Detail=available?"Processo x64 attivo":"Avviare in x64"});
-   checks.Add(new EnvironmentCheck {Name="Public API V21 / net48",Status=Directory.Exists(LibraryPath)?"OK":"ERRORE",Detail=LibraryPath});
+   bool directoryExists=Directory.Exists(libraryPath);
+   available &= directoryExists;
+   checks.Add(new EnvironmentCheck {Name="Public API V21 / net48",Status=directoryExists?"OK":"ERRORE",Detail=libraryPath});
    foreach(string file in new[]{"Siemens.Engineering.Base.dll","Siemens.Engineering.Step7.dll"}) {
     try {
      // Metadata inspection only; does not load or execute Siemens assemblies.
-     var identity=AssemblyName.GetAssemblyName(Path.Combine(LibraryPath,file));
-     bool valid=identity.Version!=null && identity.Version.Major==21;
+     var identity=AssemblyName.GetAssemblyName(Path.Combine(libraryPath,file));
+     bool valid=identity.Name==Path.GetFileNameWithoutExtension(file) && identity.Version!=null && identity.Version.Major==21;
      available &= valid;
-     checks.Add(new EnvironmentCheck {Name=file,Status=valid?"OK":"ERRORE",Detail="Versione assembly: "+identity.Version});
+     checks.Add(new EnvironmentCheck {Name=file,Status=valid?"OK":"ERRORE",Detail="Identità: "+identity.Name+" • versione: "+identity.Version});
     } catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is BadImageFormatException || ex is System.Security.SecurityException) {
      available=false; checks.Add(new EnvironmentCheck{Name=file,Status="ERRORE",Detail=ex.Message});
     }
@@ -33,9 +38,5 @@ namespace TiaAnalyzer.Openness {
    new EnvironmentCheck{Name="Public API V21",Status="MOCK",Detail="Base e Step7 disponibili (simulazione)."},
    new EnvironmentCheck{Name="Istanza dimostrativa",Status="MOCK",Detail="Linea confezionamento • progetto simulato in sola lettura"}
   }}; }
- }
- public sealed class MockTiaSession : IReadOnlyTiaSession {
-  public bool IsConnected {get{return true;}}
-  public string Description {get{return "MOCK connesso • Linea confezionamento • nessun collegamento reale";}}
  }
 }
