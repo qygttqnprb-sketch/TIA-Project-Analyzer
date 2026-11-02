@@ -1,0 +1,12 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="TiaAnalyzer.App/TiaAnalyzer.App.csproj" Id="b97a120e-c907-4cd2-bd64-56852c3be6f1">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="TiaAnalyzer.Core/TiaAnalyzer.Core.csproj" />
+  <Project Path="TiaAnalyzer.Openness/TiaAnalyzer.Openness.csproj" />
+  <Project Path="TiaAnalyzer.Export/TiaAnalyzer.Export.csproj" />
+</Solution>

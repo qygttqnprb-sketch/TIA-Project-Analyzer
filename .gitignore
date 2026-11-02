@@ -1,0 +1,7 @@
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+# Siemens binaries must remain in the local installation.
+Siemens*.dll
