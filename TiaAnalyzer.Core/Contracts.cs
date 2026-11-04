@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace TiaAnalyzer.Core
 {
@@ -45,6 +46,7 @@ namespace TiaAnalyzer.Core
         bool HasSession { get; }
         Task<IReadOnlyList<TiaInstance>> DiscoverAsync();
         Task<IReadOnlyList<ProjectComponent>> ConnectAsync(TiaInstance instance);
+        Task<ExportSnapshot> ExportPlcAsync(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation);
         Task DisconnectAsync();
         Task ShutdownAsync();
     }

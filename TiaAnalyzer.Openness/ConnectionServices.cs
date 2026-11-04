@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Threading;
 using TiaAnalyzer.Core;
 
 namespace TiaAnalyzer.Openness
@@ -53,6 +54,16 @@ namespace TiaAnalyzer.Openness
         {
             await DisconnectAsync();
             await worker.StopAsync();
+        }
+        public Task<ExportSnapshot> ExportPlcAsync(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation)
+        {
+            return worker.Run(() =>
+            {
+                cancellation.ThrowIfCancellationRequested();
+                var exporter = attached as IPlcExportSession;
+                if (exporter == null) throw new InvalidOperationException("Collegare una sessione con esportazione PLC disponibile.");
+                return exporter.ExportPlc(directory, progress, cancellation);
+            });
         }
         public Task DisconnectAsync()
         {

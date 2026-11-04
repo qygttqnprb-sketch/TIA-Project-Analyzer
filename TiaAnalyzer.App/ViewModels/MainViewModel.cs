@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Threading;
+using System.IO;
 using TiaAnalyzer.App.Infrastructure;
 using TiaAnalyzer.Core;
 using TiaAnalyzer.Export;
@@ -19,6 +21,9 @@ namespace TiaAnalyzer.App.ViewModels
         private IReadOnlyList<TiaInstance> instances = new List<TiaInstance>();
         private IReadOnlyList<ProjectComponent> components = new List<ProjectComponent>();
         private string environmentStatus = "Controllo in attesa", lastCheck = "Nessun controllo eseguito", sessionStatus = "Disconnesso";
+        private string exportRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TiaAnalyzerExports");
+        private string exportStatus = "Collegare un'istanza per esportare XML e manifest.", lastExportDirectory;
+        private CancellationTokenSource exportCancellation;
         private ITiaConnectionService Service { get { return demo ? demoConnection : realConnection; } }
         public MainViewModel() : this(new SiemensEnvironmentProbe(), new MockEnvironmentProbe(),
             new TiaConnectionService(new SiemensBackend()), new TiaConnectionService(new DemoBackend())) { }
@@ -30,6 +35,9 @@ namespace TiaAnalyzer.App.ViewModels
             ScanCommand = Command(ScanAsync, () => !busy && !connected && ready && Service.IsAvailable);
             ConnectCommand = Command(ConnectAsync, () => !busy && !connected && ready && selected != null && Service.IsAvailable && (demo || consent));
             DisconnectCommand = Command(DisconnectAsync, () => !busy && connected);
+            ExportXmlCommand = Command(ExportXmlAsync, () => !busy && connected);
+            CancelExportCommand = new AsyncCommand(() => { exportCancellation?.Cancel(); return Task.CompletedTask; },
+                () => exportCancellation != null && !exportCancellation.IsCancellationRequested, ReportError);
         }
         private AsyncCommand Command(Func<Task> action, Func<bool> canRun)
         {
@@ -45,6 +53,8 @@ namespace TiaAnalyzer.App.ViewModels
         public AsyncCommand ScanCommand { get; }
         public AsyncCommand ConnectCommand { get; }
         public AsyncCommand DisconnectCommand { get; }
+        public AsyncCommand ExportXmlCommand { get; }
+        public AsyncCommand CancelExportCommand { get; }
         public bool IsDemo
         {
             get { return demo; }
@@ -86,7 +96,9 @@ namespace TiaAnalyzer.App.ViewModels
         public string EnvironmentStatus { get { return environmentStatus; } }
         public string LastCheck { get { return lastCheck; } }
         public string SessionStatus { get { return sessionStatus; } }
-        public string ExportStatus { get { return ExportAvailability.Description; } }
+        public string ExportStatus { get { return exportStatus; } }
+        public string ExportRoot { get { return exportRoot; } set { if (busy) return; exportRoot = value; Notify(); } }
+        public string LastExportDirectory { get { return lastExportDirectory; } }
         public IList<EnvironmentCheck> Checks { get { return checks; } }
         public IReadOnlyList<ProjectComponent> Components { get { return components; } }
         public string ComponentSummary { get { return components.Count + (demo ? " componenti sintetici" : " elementi letti dai soli progetti già aperti"); } }
@@ -133,6 +145,31 @@ namespace TiaAnalyzer.App.ViewModels
             await Service.DisconnectAsync();
             ClearSession(); Log("Risorse Attach rilasciate; nessuna richiesta di chiusura TIA.");
         }
+        private async Task ExportXmlAsync()
+        {
+            var root = Path.GetFullPath(exportRoot);
+            var directory = Path.Combine(root, (demo ? "DEMO_" : "TIA_") + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            using (var cancellation = new CancellationTokenSource())
+            {
+                exportCancellation = cancellation; RefreshCommands();
+                try
+                {
+                    var progress = new Progress<ExportProgress>(p =>
+                    {
+                        if (exportCancellation == cancellation) SetExportStatus(p.Completed + " oggetti · " + p.Message);
+                    });
+                    SetExportStatus("Esportazione PLC in corso…");
+                    var snapshot = await Service.ExportPlcAsync(directory, progress, cancellation.Token);
+                    await Task.Run(() => SnapshotStore.Complete(directory, snapshot, cancellation.Token));
+                    lastExportDirectory = directory; Notify(nameof(LastExportDirectory));
+                    SetExportStatus((demo ? "DEMO · " : "") + snapshot.Artifacts.Count + " oggetti; " + snapshot.Issues.Count + " problemi. Cartella: " + directory);
+                    Log(exportStatus);
+                }
+                catch (OperationCanceledException) { SetExportStatus("Esportazione annullata. Cartella incompleta: " + directory); Log(exportStatus); }
+                finally { exportCancellation = null; RefreshCommands(); }
+            }
+        }
+        private void SetExportStatus(string message) { exportStatus = message; Notify(nameof(ExportStatus)); }
         public async Task<bool> CloseAsync()
         {
             if (busy) { Log("Operazione in corso: completare l'eventuale autorizzazione Siemens prima di chiudere."); return false; }
@@ -167,6 +204,8 @@ namespace TiaAnalyzer.App.ViewModels
         private void ClearSession()
         {
             connected = false; components = new List<ProjectComponent>(); sessionStatus = "Disconnesso";
+            lastExportDirectory = null; Notify(nameof(LastExportDirectory));
+            SetExportStatus("Collegare un'istanza per esportare XML e manifest.");
             NotifySession();
         }
         private void NotifySession()
@@ -181,6 +220,7 @@ namespace TiaAnalyzer.App.ViewModels
         private void RefreshCommands()
         {
             CheckCommand?.Refresh(); ScanCommand?.Refresh(); ConnectCommand?.Refresh(); DisconnectCommand?.Refresh();
+            ExportXmlCommand?.Refresh(); CancelExportCommand?.Refresh();
         }
     }
 }

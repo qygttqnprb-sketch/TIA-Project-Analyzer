@@ -12,7 +12,7 @@ using TiaAnalyzer.Core;
 
 namespace TiaAnalyzer.Openness
 {
-    public sealed class SiemensBackend : ITiaBackend
+    public sealed partial class SiemensBackend : ITiaBackend
     {
         public bool IsAvailable { get { return true; } }
         public IReadOnlyList<TiaInstance> Discover()
@@ -53,7 +53,7 @@ namespace TiaAnalyzer.Openness
             return new TiaConnectionException(ConnectionFailure.AuthorizationDenied,
                 "Accesso Openness rifiutato. " + OpennessAuthorization.Recovery, ex);
         }
-        private sealed class AttachedPortal : IAttachedPortal
+        private sealed partial class AttachedPortal : IAttachedPortal, IPlcExportSession
         {
             private TiaPortal portal;
             public AttachedPortal(TiaPortal portal) { this.portal = portal; }

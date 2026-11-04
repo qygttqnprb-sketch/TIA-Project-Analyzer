@@ -29,7 +29,7 @@ internal static class Program
             await AdapterTests();
             await ViewModelTests();
             MetadataTests();
-            Check(!new FutureExportPlanner().CanExport, "XML/ZIP remain disabled");
+            await ExportChecks.Run(Check);
             Console.WriteLine(passed + " checks passed; simulated adapters/source-level .NET 10 only. Siemens V21 and WPF not validated.");
         }
         finally { foreach (var service in services) await service.ShutdownAsync(); }

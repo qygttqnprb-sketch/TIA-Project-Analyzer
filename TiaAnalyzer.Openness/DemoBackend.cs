@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Threading;
 using TiaAnalyzer.Core;
 
 namespace TiaAnalyzer.Openness
@@ -12,7 +14,7 @@ namespace TiaAnalyzer.Openness
             return new[] { new TiaInstance { Id = 21001, Version = "DEMO V21", ExecutablePath = "Sintetico / nessun eseguibile", ProjectPath = "Linea confezionamento (sintetico)" } };
         }
         public IAttachedPortal Attach(TiaInstance instance) { return new DemoSession(); }
-        private sealed class DemoSession : IAttachedPortal
+        private sealed class DemoSession : IAttachedPortal, IPlcExportSession
         {
             private bool disposed;
             public IReadOnlyList<ProjectComponent> ReadComponents()
@@ -24,6 +26,16 @@ namespace TiaAnalyzer.Openness
                 return items.AsReadOnly();
             }
             public void Dispose() { disposed = true; }
+            public ExportSnapshot ExportPlc(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation)
+            {
+                if (disposed) throw new ObjectDisposedException(nameof(DemoSession));
+                var writer = new PlcExportWriter(directory, true, progress, cancellation);
+                writer.Snapshot.Components.AddRange(ReadComponents());
+                foreach (var artifact in DemoDocuments.Create())
+                    writer.Write("DEMO Linea confezionamento", "PLC_Conveyor", artifact.Group, artifact.Name, artifact.Kind,
+                        artifact.Language, false, file => File.WriteAllText(file.FullName, artifact.Xml, new System.Text.UTF8Encoding(false)));
+                return writer.Snapshot;
+            }
         }
     }
 }

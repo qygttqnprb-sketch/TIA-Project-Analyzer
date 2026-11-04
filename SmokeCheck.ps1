@@ -11,6 +11,7 @@ $real.Checks | Format-Table Name,Status,Detail -Wrap
 if ($RequireSiemens -and -not $real.Available) { throw 'Installed V21 metadata check failed.' }
 [TiaAnalyzer.Openness.OpennessRuntime]::Configure()
 $window = New-Object TiaAnalyzer.App.MainWindow
+$exportCheckRoot = Join-Path ([IO.Path]::GetTempPath()) ('tia-ui-check-' + [Guid]::NewGuid().ToString('N'))
 $window.Show()
 function Pump-UntilIdle {
     $deadline = [DateTime]::UtcNow.AddSeconds(10)
@@ -40,6 +41,14 @@ try {
     Pump-UntilIdle
     if ($window.FindName('SessionStatus').Text -notlike 'MOCK connesso*') { throw 'Demo session binding failed.' }
     if ($window.FindName('ComponentsList').Items.Count -ne 6) { throw 'Synthetic components binding failed.' }
+    $window.DataContext.ExportRoot = $exportCheckRoot
+    if (-not $window.FindName('ExportXmlButton').IsEnabled) { throw 'Connected demo XML export is disabled.' }
+    $window.FindName('ExportXmlButton').Command.Execute($null)
+    Pump-UntilIdle
+    $manifest = Join-Path $window.DataContext.LastExportDirectory 'manifest.json'
+    if (-not (Test-Path -LiteralPath $manifest)) { throw 'Demo export did not produce a manifest.' }
+    $snapshot = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+    if (-not $snapshot.IsDemo -or $snapshot.Artifacts.Count -ne 6) { throw 'Demo export manifest provenance failed.' }
     $window.FindName('DisconnectButton').Command.Execute($null)
     Pump-UntilIdle
     if ($window.FindName('ComponentsList').Items.Count -ne 0) { throw 'Disconnect did not clear components.' }
@@ -50,7 +59,7 @@ try {
     if ($window.FindName('SessionStatus').Text -ne 'Disconnesso') { throw 'Session was not reset.' }
     if ($window.FindName('ComponentsList').Items.Count -ne 0) { throw 'Mode change left stale synthetic data.' }
     if ($window.FindName('ConnectButton').IsEnabled) { throw 'Real connection enabled after mode change.' }
-    Write-Output 'PASS: diagnostics bindings, WPF startup, explicit demo discovery/selection, synthetic components, disconnect and mode reset.'
+    Write-Output 'PASS: diagnostics bindings, WPF startup, explicit demo discovery/selection, synthetic XML export, disconnect and mode reset.'
     Write-Output 'Siemens integration NOT validated. Optional metadata check does not establish API access.'
 } finally {
     $window.Close()
@@ -61,4 +70,8 @@ try {
         [Windows.Threading.Dispatcher]::PushFrame($frame)
     }
     if ($window.IsVisible) { throw 'Window cleanup timed out.' }
+    $resolvedExportCheck = [IO.Path]::GetFullPath($exportCheckRoot)
+    $resolvedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+    if (-not $resolvedExportCheck.StartsWith($resolvedTemp, [StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($resolvedExportCheck) -notlike 'tia-ui-check-*') { throw 'Unsafe test cleanup path.' }
+    if (Test-Path -LiteralPath $resolvedExportCheck) { Remove-Item -LiteralPath $resolvedExportCheck -Recurse -Force }
 }
