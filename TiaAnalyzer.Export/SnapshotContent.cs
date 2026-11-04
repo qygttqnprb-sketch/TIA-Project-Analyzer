@@ -17,8 +17,11 @@ namespace TiaAnalyzer.Export
         private readonly FileStream file;
         private readonly ZipArchive archive;
         private readonly ILookup<string, ZipArchiveEntry> entries;
-        public SnapshotContent(string snapshotPath)
+        private readonly long maximumTotalBytes;
+        private long totalBytes;
+        public SnapshotContent(string snapshotPath, long maximumTotalBytes = long.MaxValue)
         {
+            this.maximumTotalBytes = maximumTotalBytes;
             this.snapshotPath = Path.GetFullPath(snapshotPath);
             if (!Path.GetExtension(snapshotPath).Equals(".zip", StringComparison.OrdinalIgnoreCase)) return;
             file = File.OpenRead(snapshotPath);
@@ -31,6 +34,18 @@ namespace TiaAnalyzer.Export
             catch { archive?.Dispose(); file.Dispose(); throw; }
         }
         public void Dispose() { archive?.Dispose(); file?.Dispose(); }
+        public ExportSnapshot ReadManifest(CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            if (archive == null)
+            {
+                using (var stream = File.OpenRead(snapshotPath)) return SnapshotComparer.ReadVerifiedManifest(stream, cancellation);
+            }
+            var manifests = entries["manifest.json"].ToList();
+            if (manifests.Count != 1 || manifests[0].Length > 64L * 1024 * 1024)
+                throw new InvalidDataException("Manifest assente, duplicato o troppo grande.");
+            using (var stream = manifests[0].Open()) return SnapshotComparer.ReadVerifiedManifest(stream, cancellation);
+        }
         public void VerifyAll(ExportSnapshot snapshot, CancellationToken cancellation)
         {
             foreach (var artifact in snapshot.Artifacts.Where(a => a.RelativePath != null && a.Status != "Failed"))
@@ -51,7 +66,7 @@ namespace TiaAnalyzer.Export
                 }
             });
         }
-        private static void CheckHash(Stream stream, ExportArtifact artifact, CancellationToken cancellation, Stream copy)
+        private void CheckHash(Stream stream, ExportArtifact artifact, CancellationToken cancellation, Stream copy)
         {
             using (var sha = SHA256.Create())
             {
@@ -59,7 +74,9 @@ namespace TiaAnalyzer.Export
                 while ((count = stream.Read(buffer, 0, buffer.Length)) != 0)
                 {
                     cancellation.ThrowIfCancellationRequested(); bytes += count;
-                    if (bytes > MaxXmlBytes) throw new InvalidDataException("XML troppo grande per il confronto: " + artifact.Name);
+                    if (count > maximumTotalBytes - totalBytes) throw new InvalidDataException("Limite di lettura XML complessivo raggiunto.");
+                    totalBytes += count;
+                    if (bytes > MaxXmlBytes) throw new InvalidDataException("XML troppo grande: " + artifact.Name);
                     sha.TransformBlock(buffer, 0, count, buffer, 0); copy?.Write(buffer, 0, count);
                 }
                 sha.TransformFinalBlock(new byte[0], 0, 0);
@@ -76,7 +93,12 @@ namespace TiaAnalyzer.Export
                 if (matches.Count != 1 || matches[0].Length > MaxXmlBytes) throw new InvalidDataException("XML assente, duplicato o troppo grande: " + artifact.Name);
                 using (var stream = matches[0].Open()) return action(stream);
             }
-            using (var stream = File.OpenRead(ExportPaths.Resolve(Path.GetDirectoryName(Path.GetFullPath(snapshotPath)), artifact.RelativePath))) return action(stream);
+            var root = Path.GetDirectoryName(snapshotPath);
+            var path = ExportPaths.Resolve(root, artifact.RelativePath);
+            for (var current = path; !string.Equals(current, root, StringComparison.OrdinalIgnoreCase); current = Path.GetDirectoryName(current))
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidDataException("Link o junction non consentito nel contenuto dello snapshot.");
+            using (var stream = File.OpenRead(path)) return action(stream);
         }
     }
 }

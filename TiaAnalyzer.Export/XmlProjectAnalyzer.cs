@@ -33,7 +33,7 @@ namespace TiaAnalyzer.Export
                 {
                     result = new ProjectAnalysis();
                     var cache = string.IsNullOrWhiteSpace(options.CacheDirectory) ? null : new AnalysisCache(options.CacheDirectory);
-                    foreach (var artifact in snapshot.Artifacts.Where(a => a.RelativePath != null))
+                    foreach (var artifact in snapshot.Artifacts.Where(a => a.RelativePath != null && a.Status != "Failed"))
                     {
                         cancellation.ThrowIfCancellationRequested();
                         string warning = null; AnalysisFragment fragment = null;
@@ -62,13 +62,7 @@ namespace TiaAnalyzer.Export
                     ResolveDependencies(result);
                     result.Warnings = result.Warnings.Distinct(StringComparer.Ordinal).ToList();
                 }
-                result.CrossReferences.AddRange(snapshot.CrossReferences ?? new List<PlcCrossReference>());
-                SclLogicAnalyzer.ResolveCalls(result);
-                foreach (var reference in result.CrossReferences)
-                    result.Symbols.Add(new SymbolEvidence { ArtifactId = reference.QueriedArtifactId, Name = reference.SourceName,
-                        Block = reference.ReferenceName, Plc = reference.Plc, Project = reference.Project, File = "crossreferences.json", Network = "",
-                        Location = reference.Location, Address = reference.SourceAddress, Access = reference.Access, Evidence = reference.Provider + " CrossReference" });
-                result.Writes = WriteAnalyzer.Analyze(result, cancellation);
+                CompleteAnalysis(result, snapshot, cancellation);
                 return result;
             }
             finally
@@ -77,15 +71,33 @@ namespace TiaAnalyzer.Export
                 snapshot.Metrics.ManagedBytesAfter = GC.GetTotalMemory(false);
             }
         }
-        private static ProjectAnalysis AnalyzeUncached(string directory, ExportSnapshot snapshot, CancellationToken cancellation, bool includeXml)
+        internal static ProjectAnalysis AnalyzeVerified(ExportSnapshot snapshot, Func<ExportArtifact, XDocument> load, CancellationToken cancellation)
+        {
+            var result = AnalyzeUncached(null, snapshot, cancellation, false, load);
+            CompleteAnalysis(result, snapshot, cancellation); return result;
+        }
+        private static void CompleteAnalysis(ProjectAnalysis result, ExportSnapshot snapshot, CancellationToken cancellation)
+        {
+            result.CrossReferences.AddRange(snapshot.CrossReferences ?? new List<PlcCrossReference>());
+            SclLogicAnalyzer.ResolveCalls(result);
+            foreach (var reference in result.CrossReferences)
+                result.Symbols.Add(new SymbolEvidence { ArtifactId = reference.QueriedArtifactId, Name = reference.SourceName,
+                    Block = reference.ReferenceName, Plc = reference.Plc, Project = reference.Project, File = "crossreferences.json", Network = "",
+                    Location = reference.Location, Address = reference.SourceAddress, Access = reference.Access, Evidence = reference.Provider + " CrossReference" });
+            result.Writes = WriteAnalyzer.Analyze(result, cancellation);
+        }
+        private static ProjectAnalysis AnalyzeUncached(string directory, ExportSnapshot snapshot, CancellationToken cancellation, bool includeXml,
+            Func<ExportArtifact, XDocument> verifiedLoad = null)
         {
             var analysis = new ProjectAnalysis();
-            foreach (var artifact in snapshot.Artifacts.Where(a => a.RelativePath != null))
+            foreach (var artifact in snapshot.Artifacts.Where(a => a.RelativePath != null && a.Status != "Failed"))
             {
                 cancellation.ThrowIfCancellationRequested();
+                // Verified archive load failures must abort the open, not silently publish a partial context.
+                var verified = verifiedLoad == null ? null : verifiedLoad(artifact);
                 try
                 {
-                    var document = Load(ExportPaths.Resolve(directory, artifact.RelativePath));
+                    var document = verified ?? Load(ExportPaths.Resolve(directory, artifact.RelativePath));
                     artifact.ContentSha256 = XmlEvidence.Hash(document, true); artifact.ContentHashAlgorithm = "xml-tree-v2";
                     var block = new BlockAnalysis { ArtifactId = artifact.Id, Name = artifact.Name, File = artifact.RelativePath,
                         Project = artifact.Project, Plc = artifact.Plc, Unit = Unit(artifact.Group), Kind = artifact.Kind };

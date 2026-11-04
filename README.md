@@ -1,4 +1,4 @@
-# TIA Project Analyzer · V0.8
+# TIA Project Analyzer · V0.9
 
 Applicazione Windows WPF, C# 7.3, .NET Framework 4.8, x64 per esportare e analizzare
 in sola lettura il software PLC di progetti Siemens TIA Portal V21 già aperti.
@@ -20,6 +20,8 @@ La modalità demo usa esclusivamente dati sintetici.
   e confronto delle singole reti con integrità XML verificata; vedere [condizioni e confronto](docs/CONDITIONS-FOCUS-DIFF.md).
 - Consensi booleani LAD/FBD, bobine Set/Reset e indice dei siti di scrittura tra blocchi:
   report con rete/UId, ambiti separati e copertura dichiarata; vedere [reti grafiche e scritture](docs/GRAPH-WRITERS.md).
+- Apertura offline di ZIP/manifest con verifica SHA256, ricalcolo delle evidenze,
+  ricerca e anteprime delle reti senza Attach; vedere [consultazione offline](docs/OFFLINE-SNAPSHOTS.md).
 - Annullamento tra operazioni Siemens, esiti per oggetto, protezioni conservate,
   manifest/ZIP pubblicati soltanto dopo la scrittura completa. Nessun invio automatico.
 
@@ -57,6 +59,8 @@ Eseguibile Release: `TiaAnalyzer.App\bin\x64\Release\TiaAnalyzer.App.exe`.
 5. Controllare report, esiti Failed/InterfaceOnly e limitazioni; allegare manualmente lo ZIP.
 6. Cercare simboli oppure confrontare due esportazioni con **Sfoglia**.
 7. Disconnettere: TIA e il progetto devono restare aperti.
+8. Per consultare un pacchetto esistente, usare Apri snapshot offline nella ricerca:
+   non è necessaria una sessione TIA; selezionare un blocco/rete per leggerne l'XML.
 
 La demo segue lo stesso flusso e produce sei XML sintetici, marcati DEMO nel manifest.
 
@@ -67,6 +71,7 @@ dotnet run --project TiaAnalyzer.Checks/TiaAnalyzer.Checks.csproj
 dotnet build TiaAnalyzer.WpfChecks/TiaAnalyzer.WpfChecks.csproj -c Debug -p:Platform=x64 -p:EnableSiemensOpenness=true
 .\TiaAnalyzer.WpfChecks\bin\x64\Debug\net48\TiaAnalyzer.WpfChecks.exe
 .\TiaAnalyzer.WpfChecks\bin\x64\Debug\net48\TiaAnalyzer.WpfChecks.exe --graph-only
+.\TiaAnalyzer.WpfChecks\bin\x64\Debug\net48\TiaAnalyzer.WpfChecks.exe --offline-only
 ```
 
 Il primo runner verifica backend simulati, export, ZIP, analisi XML e confronto su .NET 10.

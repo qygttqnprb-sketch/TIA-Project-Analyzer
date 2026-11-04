@@ -21,6 +21,12 @@ namespace TiaAnalyzer.App
             };
         }
         private void BrowsePreviousSnapshot(object sender, RoutedEventArgs args) { BrowseSnapshot(true); }
+        private void BrowseOfflineSnapshot(object sender, RoutedEventArgs args)
+        {
+            var dialog = new OpenFileDialog { Title = "Apri snapshot offline",
+                Filter = "Snapshot TIA (*.zip;manifest.json)|*.zip;manifest.json|Manifest JSON (*.json)|*.json", CheckFileExists = true };
+            if (dialog.ShowDialog(this) == true) ((MainViewModel)DataContext).OpenSnapshotPath = dialog.FileName;
+        }
         private void BrowseCurrentSnapshot(object sender, RoutedEventArgs args) { BrowseSnapshot(false); }
         private void BrowseSnapshot(bool previous)
         {

@@ -1,4 +1,4 @@
-# Verifica Windows · V0.8
+# Verifica Windows · V0.9
 
 Compilazione Siemens, WPF demo e progetto PLC reale sono verifiche distinte.
 
@@ -71,6 +71,12 @@ fuori schermo non copre tutte le configurazioni desktop.
    della piccola demo non misurano le prestazioni di un progetto reale.
 
 ## Rilascio ed esiti
+
+Per la consultazione offline, disconnettere TIA e aprire lo ZIP prodotto in
+precedenza. Verificare provenienza, data, avvisi, simboli, tracce, scritture e
+anteprima della rete. Una copia alterata deve dare errore mantenendo il contesto
+precedente. Il sorgente non deve essere modificato o estratto dall'app.
+Vedere [OFFLINE-SNAPSHOTS.md](OFFLINE-SNAPSHOTS.md).
 
 Provare disconnessione, cambio modalità e chiusura separatamente: TIA e progetti
 restano aperti. Un'istanza di prova terminata tra rilevamento/Attach deve dare

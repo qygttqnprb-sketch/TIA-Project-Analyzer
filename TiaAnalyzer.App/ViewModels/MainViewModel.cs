@@ -35,6 +35,13 @@ namespace TiaAnalyzer.App.ViewModels
         private bool focusedPackage;
         private string traceQuery = "MotorRun", traceReport = "Esportare uno snapshot, poi indicare un simbolo per seguire le condizioni.";
         private string writerReport = "Esportare uno snapshot per consultare i siti di scrittura.", writerSummary = "Nessuna analisi delle scritture disponibile.";
+        private LoadedSnapshot analysisSnapshot;
+        private bool analysisIsOffline;
+        private string openSnapshotPath = "", snapshotOpenStatus = "Aprire uno ZIP o manifest per consultarlo senza TIA.",
+            analysisSource = "Nessuno snapshot caricato.", sourcePreview = "Selezionare una rete per leggere il sorgente XML.";
+        private string snapshotWarnings = "";
+        private IReadOnlyList<NetworkChoice> networks = new List<NetworkChoice>();
+        private NetworkChoice selectedNetwork;
         private ITiaConnectionService Service { get { return demo ? demoConnection : realConnection; } }
         public MainViewModel() : this(new SiemensEnvironmentProbe(), new MockEnvironmentProbe(),
             new TiaConnectionService(new SiemensBackend()), new TiaConnectionService(new DemoBackend())) { }
@@ -52,6 +59,8 @@ namespace TiaAnalyzer.App.ViewModels
             SearchSymbolsCommand = new RelayCommand(SearchSymbols, () => !busy && lastAnalysis != null && !string.IsNullOrWhiteSpace(searchTerm));
             TraceCommand = Command(TraceAsync, () => !busy && lastAnalysis != null && !string.IsNullOrWhiteSpace(traceQuery));
             WritersCommand = Command(WritersAsync, () => !busy && lastAnalysis != null);
+            OpenSnapshotCommand = Command(OpenSnapshotAsync, () => !busy && !string.IsNullOrWhiteSpace(openSnapshotPath));
+            PreviewNetworkCommand = Command(PreviewNetworkAsync, () => !busy && analysisSnapshot != null && selectedNetwork != null);
             CancelExportCommand = new AsyncCommand(() => { exportCancellation?.Cancel(); return Task.CompletedTask; },
                 () => exportCancellation != null && !exportCancellation.IsCancellationRequested, ReportError);
         }
@@ -76,6 +85,8 @@ namespace TiaAnalyzer.App.ViewModels
         public RelayCommand SearchSymbolsCommand { get; }
         public AsyncCommand TraceCommand { get; }
         public AsyncCommand WritersCommand { get; }
+        public AsyncCommand OpenSnapshotCommand { get; }
+        public AsyncCommand PreviewNetworkCommand { get; }
         public bool IsDemo
         {
             get { return demo; }
@@ -139,6 +150,15 @@ namespace TiaAnalyzer.App.ViewModels
         public string TraceReport { get { return traceReport; } }
         public string WriterReport { get { return writerReport; } }
         public string WriterSummary { get { return writerSummary; } }
+        public string OpenSnapshotPath { get { return openSnapshotPath; } set { if (busy) return; openSnapshotPath = value; Notify(); RefreshCommands(); } }
+        public string SnapshotOpenStatus { get { return snapshotOpenStatus; } }
+        public string AnalysisSource { get { return analysisSource; } }
+        public string SnapshotWarnings { get { return snapshotWarnings; } }
+        public string SourcePreview { get { return sourcePreview; } }
+        public IReadOnlyList<NetworkChoice> Networks { get { return networks; } }
+        public NetworkChoice SelectedNetwork { get { return selectedNetwork; } set {
+            if (busy || (value != null && !networks.Contains(value))) return; selectedNetwork = value;
+            sourcePreview = "Selezione aggiornata: leggere il sorgente della rete."; Notify(); Notify(nameof(SourcePreview)); RefreshCommands(); } }
         public IList<EnvironmentCheck> Checks { get { return checks; } }
         public IReadOnlyList<ProjectComponent> Components { get { return components; } }
         public string ComponentSummary { get { return components.Count + (demo ? " componenti sintetici" : " elementi letti dai soli progetti già aperti"); } }
@@ -192,6 +212,7 @@ namespace TiaAnalyzer.App.ViewModels
             var root = Path.GetFullPath(exportRoot);
             var directory = Path.Combine(root, (demo ? "DEMO_" : "TIA_") + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0, 8));
             lastZipPath = null; lastExportDirectory = null; lastAnalysis = null; symbolMatches = new List<SymbolEvidence>();
+            analysisIsOffline = false; ResetNavigation();
             traceReport = "Traccia da ricalcolare dopo la nuova raccolta."; Notify(nameof(TraceReport));
             writerReport = "Scritture da ricalcolare dopo la nuova raccolta."; writerSummary = "Analisi delle scritture in attesa.";
             Notify(nameof(WriterReport)); Notify(nameof(WriterSummary));
@@ -232,11 +253,7 @@ namespace TiaAnalyzer.App.ViewModels
                     });
                     lastExportDirectory = directory; Notify(nameof(LastExportDirectory));
                     lastZipPath = archive; Notify(nameof(LastZipPath));
-                    lastAnalysis = analysis;
-                    writerSummary = analysis.Writes.Groups.Count(g => g.Sites.Count > 1) + " simboli con più siti; " +
-                        analysis.Writes.Groups.Count(g => g.DistinctBlocks > 1) + " scritti da blocchi diversi. Nessun conflitto dedotto.";
-                    Notify(nameof(WriterSummary));
-                    symbolSummary = analysis.Symbols.Count + " evidenze di simboli nella raccolta locale completa."; Notify(nameof(SymbolSummary));
+                    SetAnalysisContext(new LoadedSnapshot { Path = Path.Combine(directory, "manifest.json"), Snapshot = snapshot, Analysis = analysis }, false);
                     currentSnapshotPath = archive ?? Path.Combine(directory, "manifest.json"); Notify(nameof(CurrentSnapshotPath));
                     InvalidateComparison();
                     performanceSummary = "Export " + snapshot.Metrics.ExportMilliseconds + " ms · analisi " + snapshot.Metrics.AnalysisMilliseconds +
@@ -254,6 +271,73 @@ namespace TiaAnalyzer.App.ViewModels
         }
         private void SetExportStatus(string message) { exportStatus = message; Notify(nameof(ExportStatus)); }
         private void InvalidateComparison() { comparisonStatus = "Snapshot aggiornati: eseguire il confronto."; Notify(nameof(ComparisonStatus)); }
+        private void ResetNavigation()
+        {
+            analysisSnapshot = null; networks = new List<NetworkChoice>(); selectedNetwork = null;
+            analysisSource = "Nessuno snapshot caricato."; sourcePreview = "Selezionare una rete per leggere il sorgente XML.";
+            snapshotWarnings = ""; Notify(nameof(SnapshotWarnings));
+            Notify(nameof(AnalysisSource)); Notify(nameof(Networks)); Notify(nameof(SelectedNetwork)); Notify(nameof(SourcePreview));
+        }
+        private void SetAnalysisContext(LoadedSnapshot loaded, bool offline)
+        {
+            analysisSnapshot = loaded; analysisIsOffline = offline; lastAnalysis = loaded.Analysis;
+            analysisSource = (offline ? "ARCHIVIO " : "RACCOLTA LOCALE ") + (loaded.Snapshot.IsDemo ? "DEMO · " : "REALE · ") + loaded.Path +
+                " · raccolto " + loaded.Snapshot.CreatedUtc;
+            snapshotWarnings = string.Join("\n", loaded.Warnings.Take(20));
+            if (loaded.Warnings.Count > 20) snapshotWarnings += "\nAltri avvisi nel manifest del pacchetto.";
+            if (!offline) { snapshotOpenStatus = "Contesto aggiornato dalla raccolta locale."; Notify(nameof(SnapshotOpenStatus)); }
+            symbolMatches = new List<SymbolEvidence>(); symbolSummary = lastAnalysis.Symbols.Count + " evidenze nel contesto caricato.";
+            traceReport = "Indicare un simbolo e ricalcolare la traccia."; writerReport = "Indicare un simbolo o mostrare tutte le scritture.";
+            writerSummary = lastAnalysis.Writes.Groups.Count(g => g.Sites.Count > 1) + " simboli con più siti; " +
+                lastAnalysis.Writes.Groups.Count(g => g.DistinctBlocks > 1) + " scritti da blocchi diversi. Nessun conflitto dedotto.";
+            networks = lastAnalysis.Blocks.SelectMany(b => b.Networks.Select(n => new NetworkChoice { ArtifactId = b.ArtifactId, NetworkId = n.Id,
+                Display = b.Plc + " / " + (string.IsNullOrEmpty(b.Unit) ? "" : b.Unit + " / ") + b.Name + " / rete " + n.Id + " / " + n.Language + " / " + b.Project })).Take(5000).ToList();
+            selectedNetwork = null; sourcePreview = "Selezionare una rete; elenco limitato alle prime 5000. Gli XML completi restano nello snapshot.";
+            foreach (var name in new[] { nameof(AnalysisSource), nameof(SnapshotWarnings), nameof(SymbolMatches), nameof(SymbolSummary), nameof(TraceReport), nameof(WriterReport),
+                nameof(WriterSummary), nameof(Networks), nameof(SelectedNetwork), nameof(SourcePreview) }) Notify(name);
+            RefreshCommands();
+        }
+        private async Task OpenSnapshotAsync()
+        {
+            using (var cancellation = new CancellationTokenSource())
+            {
+                exportCancellation = cancellation; snapshotOpenStatus = "Verifica XML e analisi offline in corso…";
+                Notify(nameof(SnapshotOpenStatus)); RefreshCommands();
+                try
+                {
+                    var path = Path.GetFullPath(openSnapshotPath);
+                    var loaded = await Task.Run(() => SnapshotReader.Open(path, cancellation.Token));
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    SetAnalysisContext(loaded, true);
+                    currentSnapshotPath = path; Notify(nameof(CurrentSnapshotPath)); InvalidateComparison();
+                    snapshotOpenStatus = (loaded.Snapshot.IsDemo ? "DEMO" : "REALE") + " offline · " + loaded.VerifiedFiles +
+                        " XML con SHA256 verificato; " + loaded.Snapshot.Artifacts.Count + " oggetti dichiarati; " + loaded.Warnings.Count + " avvisi." +
+                        (loaded.Snapshot.Selection == null ? "" : " Pacchetto mirato: " + loaded.Snapshot.Selection.IncludedArtifacts + " di " + loaded.Snapshot.Selection.TotalArtifacts + ".");
+                    Log(snapshotOpenStatus + " " + path);
+                }
+                catch (OperationCanceledException) { snapshotOpenStatus = "Apertura annullata; il contesto precedente resta disponibile."; }
+                catch (Exception ex) { snapshotOpenStatus = "Apertura non riuscita: " + ex.Message + " Il contesto precedente resta disponibile."; Log(snapshotOpenStatus); }
+                finally { exportCancellation = null; Notify(nameof(SnapshotOpenStatus)); RefreshCommands(); }
+            }
+        }
+        private async Task PreviewNetworkAsync()
+        {
+            using (var cancellation = new CancellationTokenSource())
+            {
+                exportCancellation = cancellation; RefreshCommands();
+                try
+                {
+                    var choice = selectedNetwork;
+                    var preview = await Task.Run(() => SnapshotReader.Preview(analysisSnapshot, choice.ArtifactId, choice.NetworkId, cancellation.Token));
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    sourcePreview = preview.File + " / rete " + preview.Network + "\n\n" + preview.Text +
+                        (preview.Truncated ? "\n\nAnteprima limitata a 16000 caratteri; consultare l'XML completo." : "");
+                }
+                catch (OperationCanceledException) { sourcePreview = "Lettura annullata."; }
+                catch (Exception ex) { sourcePreview = "Sorgente non disponibile: " + ex.Message; Log(sourcePreview); }
+                finally { exportCancellation = null; Notify(nameof(SourcePreview)); RefreshCommands(); }
+            }
+        }
         private async Task TraceAsync()
         {
             var output = Path.Combine(Path.GetFullPath(exportRoot), "Trace_" + Guid.NewGuid().ToString("N"));
@@ -343,11 +427,13 @@ namespace TiaAnalyzer.App.ViewModels
             connected = false; components = new List<ProjectComponent>(); sessionStatus = "Disconnesso";
             lastExportDirectory = null; Notify(nameof(LastExportDirectory));
             lastZipPath = null; Notify(nameof(LastZipPath));
-            lastAnalysis = null; symbolMatches = new List<SymbolEvidence>(); symbolSummary = "Esportare uno snapshot per cercare simboli.";
-            traceReport = "Esportare uno snapshot, poi indicare un simbolo per seguire le condizioni."; Notify(nameof(TraceReport));
-            writerReport = "Esportare uno snapshot per consultare i siti di scrittura."; writerSummary = "Nessuna analisi delle scritture disponibile.";
-            Notify(nameof(WriterReport)); Notify(nameof(WriterSummary));
-            Notify(nameof(SymbolMatches)); Notify(nameof(SymbolSummary));
+            if (!analysisIsOffline)
+            {
+                lastAnalysis = null; symbolMatches = new List<SymbolEvidence>(); symbolSummary = "Esportare o aprire uno snapshot per cercare simboli.";
+                traceReport = "Esportare o aprire uno snapshot, poi indicare un simbolo."; Notify(nameof(TraceReport));
+                writerReport = "Esportare o aprire uno snapshot per consultare le scritture."; writerSummary = "Nessuna analisi delle scritture disponibile.";
+                Notify(nameof(WriterReport)); Notify(nameof(WriterSummary)); Notify(nameof(SymbolMatches)); Notify(nameof(SymbolSummary)); ResetNavigation();
+            }
             SetExportStatus("Collegare un'istanza per esportare XML e manifest.");
             NotifySession();
         }
@@ -367,6 +453,7 @@ namespace TiaAnalyzer.App.ViewModels
             CompareCommand?.Refresh(); SearchSymbolsCommand?.Refresh();
             TraceCommand?.Refresh();
             WritersCommand?.Refresh();
+            OpenSnapshotCommand?.Refresh(); PreviewNetworkCommand?.Refresh();
         }
     }
 }

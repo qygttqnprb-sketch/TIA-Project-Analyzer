@@ -172,7 +172,7 @@ internal static class GraphChecks
             check(files.Contains("writers.md") && report.Groups.Single().Sites.Single().Language == "LAD" &&
                 File.ReadAllText(Path.Combine(directory, "conditions.md")).Contains("LAD modellato"), "graph writer and conditions reports retain language and source provenance");
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally { TestFiles.DeleteOwnedTemporary(root, "tia-graph-check-"); }
     }
     private static void AddScl(ProjectAnalysis analysis, string id, string plc, string source)
     {

@@ -10,6 +10,10 @@
   <ItemGroup><ProjectReference Include="../TiaAnalyzer.App/TiaAnalyzer.App.csproj" /></ItemGroup>
   <ItemGroup>
     <Compile Include="../TiaAnalyzer.Checks/GraphChecks.cs" Link="GraphChecks.cs" />
+    <Compile Include="../TiaAnalyzer.Checks/TestFiles.cs" Link="TestFiles.cs" />
+    <Compile Include="../TiaAnalyzer.Checks/OfflineChecks.cs" Link="OfflineChecks.cs" />
     <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
   </ItemGroup>
 </Project>

@@ -22,6 +22,11 @@ internal static class Program
             try { OpennessRuntime.Configure(); GraphChecks.Run(Require); Console.WriteLine("Graph and writer checks passed on net48; no TIA project attached."); return 0; }
             catch (Exception error) { Console.Error.WriteLine(error); return 1; }
         }
+        if (args.Length == 1 && args[0] == "--offline-only")
+        {
+            try { OpennessRuntime.Configure(); OfflineChecks.Run(Require).GetAwaiter().GetResult(); Console.WriteLine("Offline checks passed on net48; no TIA project attached."); return 0; }
+            catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+        }
         var output = Path.GetFullPath(args.Length == 0 ? Path.Combine("artifacts", "wpf-" + Guid.NewGuid().ToString("N")) : args[0]);
         Directory.CreateDirectory(output);
         var bindingErrors = new StringWriter();
@@ -101,6 +106,17 @@ internal static class Program
         scroll.ScrollToVerticalOffset(offset); await Dispatcher.Yield(); Capture(window, Path.Combine(output, "export-900.png"));
         await vm.DisconnectCommand.ExecuteAsync(); await Dispatcher.Yield();
         Require(((ItemsControl)window.FindName("ComponentsList")).Items.Count == 0 && !((Button)window.FindName("ExportZipButton")).IsEnabled, "disconnect clears components and disables export");
+        vm.OpenSnapshotPath = firstZip; await vm.OpenSnapshotCommand.ExecuteAsync(); await Dispatcher.Yield();
+        Require(vm.AnalysisSource.Contains("ARCHIVIO DEMO") && vm.Networks.Count > 0, "offline ZIP opens while disconnected");
+        var networkList = (ComboBox)window.FindName("NetworkList");
+        networkList.SelectedItem = System.Linq.Enumerable.First(vm.Networks, n => n.Display.Contains("ConveyorControl")); await Dispatcher.Yield();
+        await vm.PreviewNetworkCommand.ExecuteAsync(); await Dispatcher.Yield();
+        Require(((TextBox)window.FindName("SourcePreview")).Text.Contains("JamDetected"), "offline network selection and XML preview bindings");
+        await vm.TraceCommand.ExecuteAsync(); await vm.WritersCommand.ExecuteAsync(); await Dispatcher.Yield();
+        Require(vm.TraceReport.Contains("JamDetected") && vm.WriterReport.Contains("MotorRun"), "disconnected archive retains condition and writer actions");
+        window.Width = 1180; window.UpdateLayout();
+        offset = analysisCard.TranslatePoint(new Point(), scroll).Y + scroll.VerticalOffset;
+        scroll.ScrollToVerticalOffset(offset); await Dispatcher.Yield(); Capture(window, Path.Combine(output, "offline.png"));
         Console.WriteLine("Artifacts: " + output);
     }
     private static void Capture(Window window, string path)

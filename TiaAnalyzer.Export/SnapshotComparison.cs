@@ -111,17 +111,23 @@ namespace TiaAnalyzer.Export
             }
             Validate(snapshot); return snapshot;
         }
-        private static ExportSnapshot ReadBounded(Stream input)
+        internal static ExportSnapshot ReadVerifiedManifest(Stream input, CancellationToken cancellation)
+        {
+            var snapshot = ReadBounded(input, cancellation); Validate(snapshot); return snapshot;
+        }
+        private static ExportSnapshot ReadBounded(Stream input, CancellationToken cancellation = default(CancellationToken))
         {
             using (var memory = new MemoryStream())
             {
                 var buffer = new byte[81920]; int count;
                 while ((count = input.Read(buffer, 0, buffer.Length)) != 0)
                 {
+                    cancellation.ThrowIfCancellationRequested();
                     if (memory.Length + count > MaxManifestBytes) throw new InvalidDataException("Manifest decompresso troppo grande.");
                     memory.Write(buffer, 0, count);
                 }
                 memory.Position = 0;
+                cancellation.ThrowIfCancellationRequested();
                 return JsonFiles.Read<ExportSnapshot>(memory);
             }
         }
@@ -134,6 +140,7 @@ namespace TiaAnalyzer.Export
             if (snapshot == null || snapshot.SchemaVersion != "1.0" || snapshot.Artifacts == null || snapshot.Issues == null || snapshot.Artifacts.Count > 100000)
                 throw new InvalidDataException("Schema manifest non supportato o incompleto.");
             var ids = new HashSet<string>();
+            var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var artifact in snapshot.Artifacts)
             {
                 if (artifact == null || !IsHash(artifact.Id) || !ids.Add(artifact.Id) || string.IsNullOrEmpty(artifact.Name) || string.IsNullOrEmpty(artifact.Project) ||
@@ -142,10 +149,19 @@ namespace TiaAnalyzer.Export
                 if (artifact.Status != "Failed" && (!IsHash(artifact.Sha256) || string.IsNullOrWhiteSpace(artifact.RelativePath)))
                     throw new InvalidDataException("Oggetto esportato senza file o hash.");
                 if (artifact.ContentSha256 != null && !IsHash(artifact.ContentSha256)) throw new InvalidDataException("Hash contenuto non valido.");
+                if (artifact.Bytes < 0 || (artifact.RelativePath != null && !paths.Add(artifact.RelativePath)))
+                    throw new InvalidDataException("Dimensione o percorso duplicato non valido.");
                 if (artifact.Fingerprints != null && (artifact.Fingerprints.Count > 100 || artifact.Fingerprints.Any(f => f == null || string.IsNullOrEmpty(f.Kind) || string.IsNullOrEmpty(f.Value)) ||
                     artifact.Fingerprints.Select(f => f.Kind).Distinct().Count() != artifact.Fingerprints.Count)) throw new InvalidDataException("Fingerprint non validi.");
                 if (artifact.RelativePath != null) ExportPaths.Resolve(Path.GetTempPath(), artifact.RelativePath);
             }
+            if (snapshot.CrossReferences != null && (snapshot.CrossReferences.Count > 200000 || snapshot.CrossReferences.Any(r => r == null)))
+                throw new InvalidDataException("Riferimenti incrociati non validi.");
+            var selection = snapshot.Selection;
+            if (selection != null && (selection.IncludedArtifacts != snapshot.Artifacts.Count || selection.ExcludedIds == null ||
+                selection.ExcludedIds.Count > 100000 || selection.TotalArtifacts != selection.IncludedArtifacts + selection.ExcludedIds.Count ||
+                selection.ExcludedIds.Any(id => !IsHash(id) || ids.Contains(id)) || selection.ExcludedIds.Distinct().Count() != selection.ExcludedIds.Count))
+                throw new InvalidDataException("Selezione del pacchetto non valida.");
         }
         public static string Markdown(SnapshotComparison comparison)
         {

@@ -1,5 +1,21 @@
 # Esiti verificati · 4 novembre 2026
 
+## Aggiornamento V0.9
+
+- 225 controlli automatici .NET 10 superati.
+- 30 controlli offline e 51 controlli grafici ripetuti su net48.
+- 21 verifiche WPF superate, zero errori di binding: ZIP aperto da disconnesso,
+  scelta della rete, anteprima XML, condizioni e siti di scrittura.
+- Build Debug/Release x64 con Siemens V21 riuscite senza errori/avvisi.
+- Verificati hash errati, XML/manifest duplicati, file mancanti, report serializzati
+  ignorati, percorsi non sicuri, compatibilità dei campi opzionali, selezioni mirate,
+  DTD, cancellazione, anteprime troncate e modifiche dello snapshot dopo l'apertura.
+- Il contesto precedente resta disponibile quando l'apertura fallisce.
+  La ricerca offline funziona anche con diagnostica Siemens indisponibile simulata.
+- Nessun archivio viene estratto o modificato durante apertura/anteprima.
+  Prove e ZIP usano dati sintetici; Attach/export e reti di progetti reali restano
+  da validare. Dettagli in [OFFLINE-SNAPSHOTS.md](OFFLINE-SNAPSHOTS.md).
+
 ## Aggiornamento V0.8
 
 - 195 controlli automatici .NET 10 con dati sintetici/simulati.
