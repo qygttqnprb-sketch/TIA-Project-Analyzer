@@ -35,9 +35,15 @@
     <TextBlock Text="Cartella di destinazione" Foreground="#A1B2C4"/>
     <TextBox x:Name="ExportRoot" Text="{Binding ExportRoot, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanChangeMode}" Padding="10" Margin="0,6,0,12" AutomationProperties.Name="Cartella di destinazione esportazione"/>
     <TextBlock Text="Domanda da includere nel pacchetto" Foreground="#A1B2C4"/>
+    <WrapPanel Margin="0,8,0,12" IsEnabled="{Binding CanChangeMode}">
+     <CheckBox Content="Cache analisi" IsChecked="{Binding UseAnalysisCache}" Foreground="#E5EDF5" Margin="0,0,20,0"/>
+     <CheckBox Content="Report compatti" IsChecked="{Binding CompactReports}" Foreground="#E5EDF5" Margin="0,0,20,0" ToolTip="Gli XML originali restano completi; si evita di duplicarli nei report."/>
+     <CheckBox Content="Riusa XML con impronta invariata" IsChecked="{Binding ReuseXml}" Foreground="#E5EDF5" ToolTip="Opzionale. In assenza di un'impronta affidabile viene eseguito l'export completo. Disattivare per una raccolta completamente nuova."/>
+    </WrapPanel>
     <TextBox x:Name="Question" Text="{Binding Question, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanChangeMode}" Padding="10" Margin="0,6,0,12" MinHeight="80" AcceptsReturn="True" TextWrapping="Wrap" AutomationProperties.Name="Domanda per l'analisi del progetto"/>
     <WrapPanel><Button x:Name="ExportXmlButton" Content="Esporta XML" Command="{Binding ExportXmlCommand}"/><Button x:Name="ExportZipButton" Content="Crea ZIP per ChatGPT" Command="{Binding ExportZipCommand}"/><Button x:Name="CancelExportButton" Content="Annulla esportazione" Command="{Binding CancelExportCommand}"/></WrapPanel>
     <TextBlock x:Name="ExportStatus" Text="{Binding ExportStatus}" Foreground="#A1B2C4" FontSize="12" Margin="0,12,0,0"/>
+    <TextBlock Text="{Binding PerformanceSummary}" Foreground="#A1B2C4" FontSize="12" Margin="0,8,0,0"/>
     <TextBlock Text="{Binding LastZipPath}" Foreground="#65E1C8" Margin="0,12,0,0"/>
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,16,0,0"><StackPanel>

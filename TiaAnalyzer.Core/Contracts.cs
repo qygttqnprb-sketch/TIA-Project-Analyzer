@@ -46,7 +46,7 @@ namespace TiaAnalyzer.Core
         bool HasSession { get; }
         Task<IReadOnlyList<TiaInstance>> DiscoverAsync();
         Task<IReadOnlyList<ProjectComponent>> ConnectAsync(TiaInstance instance);
-        Task<ExportSnapshot> ExportPlcAsync(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation);
+        Task<ExportSnapshot> ExportPlcAsync(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation, ExportOptions options = null);
         Task DisconnectAsync();
         Task ShutdownAsync();
     }

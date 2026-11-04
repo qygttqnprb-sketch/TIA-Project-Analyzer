@@ -2,7 +2,8 @@
 
 Ogni export genera `analysis.json`, `symbols.json`, `dependencies.dot`, `logic.md`
 e `blocks/<id>.md`. I documenti includono file originali, ID reti, testo SCL ricostruito
-e NetworkSource integrale. Gli XML non vengono riscritti: contatti, polarità, fili
+e, nei report dettagliati, NetworkSource integrale. Con Report compatti il contenuto
+non viene duplicato negli indici: rimane negli XML originali collegati. Gli XML non vengono riscritti: contatti, polarità, fili
 e dati GRAPH restano disponibili per ChatGPT.
 
 ## Chiamate e simboli
@@ -16,6 +17,8 @@ Le dipendenze si risolvono entro lo stesso progetto, PLC e Software Unit.
 Nomi ambigui/esterni restano irrisolti. Le multi-istanze locali sono collegate al
 tipo dichiarato quando disponibile, le istanze DB al proprio FB. L'indice indica
 origine/rete/evidenza, senza attribuire significato read/write non dimostrato.
+Quando disponibili, i cross-reference ufficiali Siemens aggiungono accesso e
+posizione con provenienza esplicita; vedere [cache e prestazioni](PERFORMANCE-CACHE.md).
 La UI mostra al massimo 200 risultati con conteggio completo e rimando al JSON.
 
 È estrazione di evidenze, non un compilatore Siemens: accessi complessi, template,

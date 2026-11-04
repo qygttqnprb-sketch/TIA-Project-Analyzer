@@ -14,9 +14,11 @@ namespace TiaAnalyzer.Export
         public static string Build(string directory, ExportSnapshot snapshot, string question, PackageDiagnostics diagnostics, CancellationToken cancellation, ProjectAnalysis analysis = null)
         {
             snapshot.Question = question ?? "";
+            snapshot.Metrics = snapshot.Metrics ?? new ExportMetrics();
             cancellation.ThrowIfCancellationRequested();
             var entries = new List<string> { "README.md", "QUESTION.md", "index.md", "report.md", "diagnostics.json", "components.json", "manifest.json" };
             analysis = analysis ?? XmlProjectAnalyzer.Analyze(directory, snapshot, cancellation);
+            var documentTimer = System.Diagnostics.Stopwatch.StartNew();
             entries.AddRange(AnalysisWriter.Write(directory, analysis, cancellation));
             WriteText(directory, "README.md", "# TIA Project Analyzer\n\n" +
                 (snapshot.IsDemo ? "**DEMO: tutti i dati PLC sono sintetici.**\n\n" : "Snapshot offline del progetto TIA Portal V21.\n\n") +
@@ -32,16 +34,18 @@ namespace TiaAnalyzer.Export
             WriteText(directory, "index.md", BuildIndex(snapshot));
             WriteText(directory, "report.md", BuildReport(snapshot));
             JsonFiles.Write(ExportPaths.Resolve(directory, "diagnostics.json"), diagnostics ?? new PackageDiagnostics());
-            SnapshotStore.Complete(directory, snapshot, cancellation);
+            snapshot.Metrics.DocumentsMilliseconds = documentTimer.ElapsedMilliseconds;
+            SnapshotStore.Complete(directory, snapshot, cancellation, false);
+            entries.Add("crossreferences.json");
             foreach (var artifact in snapshot.Artifacts.Where(a => a.RelativePath != null)) entries.Add(artifact.RelativePath);
-            return CreateArchive(directory, Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + ".zip", entries, cancellation);
+            return CreateArchive(directory, Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + ".zip", entries, cancellation, snapshot.Metrics);
         }
         public static void WriteText(string directory, string relativePath, string content)
         {
             using (var stream = new FileStream(ExportPaths.Resolve(directory, relativePath), FileMode.CreateNew, FileAccess.Write))
             using (var writer = new StreamWriter(stream, new UTF8Encoding(false))) writer.Write(content);
         }
-        public static string CreateArchive(string directory, string destination, IEnumerable<string> relativePaths, CancellationToken cancellation)
+        public static string CreateArchive(string directory, string destination, IEnumerable<string> relativePaths, CancellationToken cancellation, ExportMetrics metrics = null)
         {
             // Publish only a closed, complete archive. Never replace an existing destination.
             var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".partial";
@@ -57,6 +61,7 @@ namespace TiaAnalyzer.Export
                     {
                         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                         var buffer = new byte[81920];
+                        var timer = System.Diagnostics.Stopwatch.StartNew();
                         foreach (var relative in relativePaths)
                         {
                             cancellation.ThrowIfCancellationRequested();
@@ -73,6 +78,14 @@ namespace TiaAnalyzer.Export
                                     target.Write(buffer, 0, count);
                                 }
                             }
+                        }
+                        if (metrics != null)
+                        {
+                            metrics.ArchivePayloadMilliseconds = timer.ElapsedMilliseconds;
+                            JsonFiles.Write(ExportPaths.Resolve(directory, "metrics.json"), metrics);
+                            var entry = archive.CreateEntry("metrics.json", CompressionLevel.Optimal);
+                            using (var input = File.OpenRead(ExportPaths.Resolve(directory, "metrics.json")))
+                            using (var target = entry.Open()) input.CopyTo(target);
                         }
                     }
                 }
@@ -113,6 +126,10 @@ namespace TiaAnalyzer.Export
                 .Append(". Problemi di raccolta: ").Append(snapshot.Issues.Count).AppendLine(".");
             result.AppendLine("\n## Limitazioni\n");
             foreach (var limitation in snapshot.Limitations) result.Append("- ").AppendLine(Text(limitation));
+            result.AppendLine("\n## Riferimenti e cache\n");
+            result.Append("Posizioni cross-reference: ").Append(snapshot.CrossReferences?.Count ?? 0).AppendLine(". Provenienza e accesso sono conservati in crossreferences.json.");
+            result.Append("XML riutilizzati: ").Append(snapshot.Artifacts.Count(a => a.ReusedXml)).AppendLine(". Lo snapshot contiene comunque tutti i file dichiarati.");
+            foreach (var note in snapshot.Notes ?? new List<string>()) result.Append("- ").AppendLine(Text(note));
             result.AppendLine("\n## Problemi\n");
             if (snapshot.Issues.Count == 0) result.AppendLine("Nessun errore di raccolta registrato. Le limitazioni restano applicabili.");
             foreach (var issue in snapshot.Issues) result.Append("- ").Append(Text(issue.Source)).Append(": ").AppendLine(Text(issue.Message));

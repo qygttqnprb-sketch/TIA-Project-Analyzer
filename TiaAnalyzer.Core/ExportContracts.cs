@@ -24,6 +24,9 @@ namespace TiaAnalyzer.Core
         public string ContentSha256 { get; set; }
         public long Bytes { get; set; }
         public bool Protected { get; set; }
+        public bool ReusedXml { get; set; }
+        public List<ObjectFingerprint> Fingerprints { get; set; }
+        public string CrossReferencesStatus { get; set; }
     }
     public sealed class ExportIssue
     {
@@ -49,6 +52,12 @@ namespace TiaAnalyzer.Core
         public List<ProjectComponent> Components { get; set; } = new List<ProjectComponent>();
         [DataMember]
         public List<string> Limitations { get; set; } = new List<string>();
+        [DataMember]
+        public List<PlcCrossReference> CrossReferences { get; set; } = new List<PlcCrossReference>();
+        [DataMember]
+        public List<string> Notes { get; set; } = new List<string>();
+        // Recorded separately in metrics.json, after the archive payload is written.
+        public ExportMetrics Metrics { get; set; } = new ExportMetrics();
     }
     public sealed class PackageDiagnostics
     {
@@ -63,7 +72,7 @@ namespace TiaAnalyzer.Core
     // Only file export from an already attached session; no import/write-to-project APIs.
     public interface IPlcExportSession
     {
-        ExportSnapshot ExportPlc(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation);
+        ExportSnapshot ExportPlc(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation, ExportOptions options = null);
     }
     public static class ExportPaths
     {

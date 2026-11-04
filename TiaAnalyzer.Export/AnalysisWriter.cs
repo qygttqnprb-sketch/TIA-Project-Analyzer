@@ -36,7 +36,8 @@ namespace TiaAnalyzer.Export
                 {
                     doc.Append("## Rete ").Append(PackageWriter.Text(network.Id)).Append(" · ").AppendLine(PackageWriter.Text(network.Language));
                     if (network.Source != null) doc.AppendLine("\nTesto SCL ricostruito dai token; verificare sempre l'XML originale.\n").AppendLine(Code(network.Source, "scl"));
-                    doc.AppendLine("\nNetworkSource XML originale (anche collegamenti e polarità delle reti grafiche):\n").AppendLine(Code(network.GraphXml, "xml"));
+                    if (network.GraphXml != null) doc.AppendLine("\nNetworkSource XML originale (anche collegamenti e polarità delle reti grafiche):\n").AppendLine(Code(network.GraphXml, "xml"));
+                    else doc.AppendLine("\nReport compatto: leggere NetworkSource della rete nell'XML originale collegato sopra.\n");
                 }
                 PackageWriter.WriteText(directory, relative, doc.ToString());
             }

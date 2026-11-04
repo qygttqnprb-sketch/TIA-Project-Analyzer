@@ -59,11 +59,15 @@ internal static class Program
         await vm.ConnectCommand.ExecuteAsync(); await Dispatcher.Yield();
         Require(((ItemsControl)window.FindName("ComponentsList")).Items.Count == 6, "six synthetic components rendered");
         vm.ExportRoot = output;
+        vm.ReuseXml = true;
         await vm.ExportZipCommand.ExecuteAsync(); await Dispatcher.Yield();
         Require(File.Exists(vm.LastZipPath) && ((TextBlock)window.FindName("ExportStatus")).Text.Contains("ZIP:"), "ZIP command and result bindings");
+        var firstZip = vm.LastZipPath;
+        await vm.ExportZipCommand.ExecuteAsync(); await Dispatcher.Yield();
+        Require(vm.PerformanceSummary.Contains("XML riusati 5") && vm.PerformanceSummary.Contains("cache analisi 6"), "warm cache and performance bindings");
         vm.SearchTerm = "SafetyOK"; vm.SearchSymbolsCommand.Execute(null); await Dispatcher.Yield();
-        Require(vm.SymbolMatches.Count == 2, "symbol query binds declaration and network reference");
-        vm.PreviousSnapshotPath = vm.LastZipPath; await vm.CompareCommand.ExecuteAsync(); await Dispatcher.Yield();
+        Require(vm.SymbolMatches.Count == 3, "symbol query binds declaration, XML and demo cross-reference");
+        vm.PreviousSnapshotPath = firstZip; await vm.CompareCommand.ExecuteAsync(); await Dispatcher.Yield();
         Require(vm.ComparisonStatus.StartsWith("0 differenze"), "comparison command completes on WPF dispatcher");
         var scroll = (ScrollViewer)window.FindName("MainScroll");
         scroll.ScrollToTop(); await Dispatcher.Yield(); Capture(window, Path.Combine(output, "overview.png"));

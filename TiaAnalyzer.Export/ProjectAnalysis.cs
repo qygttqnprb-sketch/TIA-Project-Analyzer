@@ -11,6 +11,7 @@ namespace TiaAnalyzer.Export
         public List<SymbolEvidence> Symbols { get; set; } = new List<SymbolEvidence>();
         public List<DependencyEvidence> Dependencies { get; set; } = new List<DependencyEvidence>();
         public List<string> Warnings { get; set; } = new List<string>();
+        public List<TiaAnalyzer.Core.PlcCrossReference> CrossReferences { get; set; } = new List<TiaAnalyzer.Core.PlcCrossReference>();
     }
     public sealed class BlockAnalysis
     {
@@ -43,7 +44,9 @@ namespace TiaAnalyzer.Export
         public string Evidence { get; set; }
         public string DataType { get; set; }
         public string Address { get; set; }
-        public string Display { get { return Name + " · " + Block + " · " + Plc + " · rete " + Network + " · " + Evidence; } }
+        public string Access { get; set; }
+        public string Location { get; set; }
+        public string Display { get { return Name + " · " + Block + " · " + Plc + " · " + (Location ?? "rete " + Network) + " · " + Evidence + " " + Access; } }
     }
     public sealed class DependencyEvidence
     {

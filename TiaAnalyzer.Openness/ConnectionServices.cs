@@ -55,14 +55,18 @@ namespace TiaAnalyzer.Openness
             await DisconnectAsync();
             await worker.StopAsync();
         }
-        public Task<ExportSnapshot> ExportPlcAsync(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation)
+        public Task<ExportSnapshot> ExportPlcAsync(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation, ExportOptions options = null)
         {
             return worker.Run(() =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 var exporter = attached as IPlcExportSession;
                 if (exporter == null) throw new InvalidOperationException("Collegare una sessione con esportazione PLC disponibile.");
-                return exporter.ExportPlc(directory, progress, cancellation);
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                var snapshot = exporter.ExportPlc(directory, progress, cancellation, options);
+                snapshot.Metrics.ExportMilliseconds = timer.ElapsedMilliseconds;
+                snapshot.Metrics.CrossReferenceCount = snapshot.CrossReferences.Count;
+                return snapshot;
             });
         }
         public Task DisconnectAsync()

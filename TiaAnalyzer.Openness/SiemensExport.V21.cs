@@ -18,13 +18,16 @@ namespace TiaAnalyzer.Openness
     {
         private sealed partial class AttachedPortal
         {
-            public ExportSnapshot ExportPlc(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation)
+            public ExportSnapshot ExportPlc(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation, TiaAnalyzer.Core.ExportOptions options = null)
             {
                 if (portal == null) throw new ObjectDisposedException(nameof(AttachedPortal));
-                var writer = new PlcExportWriter(directory, false, progress, cancellation);
+                var writer = new PlcExportWriter(directory, false, progress, cancellation, options)
+                    { ApiIdentity = System.Diagnostics.FileVersionInfo.GetVersionInfo(typeof(TiaPortal).Assembly.Location).FileVersion + "|" +
+                        System.Diagnostics.FileVersionInfo.GetVersionInfo(typeof(PlcSoftware).Assembly.Location).FileVersion };
                 writer.Snapshot.Components.AddRange(ReadComponents());
                 foreach (Project project in portal.Projects)
                 {
+                    writer.SourceIdentity = project.Path?.FullName;
                     writer.CheckCancellation();
                     var visited = new HashSet<Device>();
                     foreach (Device device in project.Devices) ExportDevice(device, project.Name, "", visited, writer);
@@ -118,8 +121,8 @@ namespace TiaAnalyzer.Openness
             }
             private static void ExportBlock(PlcBlock block, string project, string plc, string group, PlcExportWriter writer)
             {
-                writer.Write(project, plc, group, block.Name, block.GetType().Name, block.ProgrammingLanguage.ToString(),
-                    block.IsKnowHowProtected, file => block.Export(file, ExportOptions.WithDefaults), block.Number);
+                ExportObject(writer, block, project, plc, group, block.Name, block.GetType().Name, block.ProgrammingLanguage.ToString(),
+                    block.IsKnowHowProtected, file => block.Export(file, Siemens.Engineering.ExportOptions.WithDefaults), block.Number);
             }
             private static void ExportTypes(PlcTypeGroup group, string project, string plc, string path, PlcExportWriter writer)
             {
@@ -127,8 +130,8 @@ namespace TiaAnalyzer.Openness
                 {
                     foreach (PlcType type in group.Types)
                         Traverse(writer, project + plc + path + "/" + type.Name, () =>
-                            writer.Write(project, plc, path, type.Name, "UDT", "", type.IsKnowHowProtected,
-                                file => type.Export(file, ExportOptions.WithDefaults)));
+                            ExportObject(writer, type, project, plc, path, type.Name, "UDT", "", type.IsKnowHowProtected,
+                                file => type.Export(file, Siemens.Engineering.ExportOptions.WithDefaults)));
                     foreach (PlcTypeUserGroup child in group.Groups) ExportTypes(child, project, plc, path + "/" + Uri.EscapeDataString(child.Name), writer);
                     var system = group as PlcTypeSystemGroup;
                     if (system != null)
@@ -137,8 +140,8 @@ namespace TiaAnalyzer.Openness
                             {
                                 foreach (PlcType type in child.Types)
                                     Traverse(writer, project + plc + path + "/System/" + child.Name + "/" + type.Name, () =>
-                                        writer.Write(project, plc, path + "/System/" + Uri.EscapeDataString(child.Name), type.Name, "UDT", "", type.IsKnowHowProtected,
-                                            file => type.Export(file, ExportOptions.WithDefaults)));
+                                        ExportObject(writer, type, project, plc, path + "/System/" + Uri.EscapeDataString(child.Name), type.Name, "UDT", "", type.IsKnowHowProtected,
+                                            file => type.Export(file, Siemens.Engineering.ExportOptions.WithDefaults)));
                             });
                 });
             }
@@ -147,8 +150,8 @@ namespace TiaAnalyzer.Openness
                 Traverse(writer, project + plc + path, () =>
                 {
                     foreach (PlcTagTable table in group.TagTables)
-                        writer.Write(project, plc, path, table.Name, "TagTable", "", false,
-                            file => table.Export(file, ExportOptions.WithDefaults));
+                        ExportObject(writer, table, project, plc, path, table.Name, "TagTable", "", false,
+                            file => table.Export(file, Siemens.Engineering.ExportOptions.WithDefaults));
                     foreach (PlcTagTableUserGroup child in group.Groups) ExportTags(child, project, plc, path + "/" + Uri.EscapeDataString(child.Name), writer);
                 });
             }

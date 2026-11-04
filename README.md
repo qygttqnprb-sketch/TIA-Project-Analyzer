@@ -14,6 +14,8 @@ La modalità demo usa esclusivamente dati sintetici.
   inventario hardware, diagnostica e documentazione di ogni blocco/rete.
 - Chiamate, dipendenze delle istanze DB, dichiarazioni/riferimenti dei simboli e grafo Graphviz.
 - Ricerca variabili/indirizzi nell'ultimo snapshot e confronto tra due ZIP o manifest.
+- Riferimenti incrociati Siemens con tipo di accesso, cache analisi, riuso XML opzionale
+  con fingerprint e misure dei tempi; vedere [cache e prestazioni](docs/PERFORMANCE-CACHE.md).
 - Annullamento tra operazioni Siemens, esiti per oggetto, protezioni conservate,
   manifest/ZIP pubblicati soltanto dopo la scrittura completa. Nessun invio automatico.
 

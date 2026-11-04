@@ -46,7 +46,7 @@ namespace TiaAnalyzer.Export
             using (var sha = SHA256.Create())
                 return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
         }
-        public static void Complete(string directory, ExportSnapshot snapshot, CancellationToken cancellation)
+        public static void Complete(string directory, ExportSnapshot snapshot, CancellationToken cancellation, bool writeMetrics = true)
         {
             foreach (var artifact in snapshot.Artifacts)
             {
@@ -58,6 +58,8 @@ namespace TiaAnalyzer.Export
             }
             cancellation.ThrowIfCancellationRequested();
             JsonFiles.Write(Path.Combine(directory, "components.json"), snapshot.Components);
+            JsonFiles.Write(Path.Combine(directory, "crossreferences.json"), snapshot.CrossReferences ?? new System.Collections.Generic.List<PlcCrossReference>());
+            if (writeMetrics) JsonFiles.Write(Path.Combine(directory, "metrics.json"), snapshot.Metrics ?? new ExportMetrics());
             JsonFiles.WriteAtomic(Path.Combine(directory, "manifest.json"), snapshot, cancellation);
         }
     }

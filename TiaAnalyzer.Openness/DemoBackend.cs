@@ -26,14 +26,23 @@ namespace TiaAnalyzer.Openness
                 return items.AsReadOnly();
             }
             public void Dispose() { disposed = true; }
-            public ExportSnapshot ExportPlc(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation)
+            public ExportSnapshot ExportPlc(string directory, IProgress<ExportProgress> progress, CancellationToken cancellation, ExportOptions options = null)
             {
                 if (disposed) throw new ObjectDisposedException(nameof(DemoSession));
-                var writer = new PlcExportWriter(directory, true, progress, cancellation);
+                var writer = new PlcExportWriter(directory, true, progress, cancellation, options) { SourceIdentity = "synthetic-conveyor-v1", ApiIdentity = "DEMO-XML-v1" };
                 writer.Snapshot.Components.AddRange(ReadComponents());
-                foreach (var artifact in DemoDocuments.Create())
-                    writer.Write("DEMO Linea confezionamento", "PLC_Conveyor", artifact.Group, artifact.Name, artifact.Kind,
-                        artifact.Language, false, file => File.WriteAllText(file.FullName, artifact.Xml, new System.Text.UTF8Encoding(false)));
+                foreach (var document in DemoDocuments.Create())
+                {
+                    var artifact = writer.Write("DEMO Linea confezionamento", "PLC_Conveyor", document.Group, document.Name, document.Kind,
+                        document.Language, false, file => File.WriteAllText(file.FullName, document.Xml, new System.Text.UTF8Encoding(false)),
+                        readStamp: document.Kind == "TagTable" ? (Func<ExportStamp>)null : () => new ExportStamp
+                        { Token = ExportPaths.Hash(document.Xml), Fingerprints = new List<ObjectFingerprint> { new ObjectFingerprint { Kind = "DemoXml", Value = ExportPaths.Hash(document.Xml) } } });
+                    artifact.CrossReferencesStatus = writer.CaptureCrossReferences ? "Demo" : "NotRequested";
+                    if (writer.CaptureCrossReferences && document.Name == "ConveyorControl")
+                        foreach (var name in new[] { "SafetyOK", "DriveReady", "JamDetected", "MotorRun" })
+                            writer.Snapshot.CrossReferences.Add(new PlcCrossReference { QueriedArtifactId = artifact.Id, Project = artifact.Project, Plc = artifact.Plc,
+                                SourceName = name, ReferenceName = artifact.Name, Location = "Rete 1", Access = name == "MotorRun" ? "Write" : "Read", Provider = "DEMO" });
+                }
                 return writer.Snapshot;
             }
         }

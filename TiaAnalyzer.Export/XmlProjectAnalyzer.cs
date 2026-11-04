@@ -19,7 +19,60 @@ namespace TiaAnalyzer.Export
         private static readonly Regex Calls = new Regex(@"(?<![#\p{L}\p{Nd}_.])(?<name>""(?:[^""]|"""")+""|[\p{L}_][\p{L}\p{Nd}_]*)(?=\s*\()", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
         private static readonly HashSet<string> Keywords = new HashSet<string>(new[] { "IF", "ELSIF", "WHILE", "FOR", "CASE", "NOT", "AND", "OR", "XOR", "MOD" }, StringComparer.OrdinalIgnoreCase);
 
-        public static ProjectAnalysis Analyze(string directory, ExportSnapshot snapshot, CancellationToken cancellation)
+        public static ProjectAnalysis Analyze(string directory, ExportSnapshot snapshot, CancellationToken cancellation, AnalysisOptions options = null)
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            snapshot.Metrics = snapshot.Metrics ?? new ExportMetrics();
+            snapshot.Metrics.AnalysisCacheHits = 0; snapshot.Metrics.AnalysisCacheMisses = 0;
+            snapshot.Metrics.ManagedBytesBefore = GC.GetTotalMemory(false);
+            try
+            {
+                ProjectAnalysis result;
+                if (options == null) result = AnalyzeUncached(directory, snapshot, cancellation, true);
+                else
+                {
+                    result = new ProjectAnalysis();
+                    var cache = string.IsNullOrWhiteSpace(options.CacheDirectory) ? null : new AnalysisCache(options.CacheDirectory);
+                    foreach (var artifact in snapshot.Artifacts.Where(a => a.RelativePath != null))
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        string warning = null; AnalysisFragment fragment = null;
+                        var hash = SnapshotStore.FileHash(ExportPaths.Resolve(directory, artifact.RelativePath));
+                        if (cache != null && cache.Restore(directory, artifact, hash, options.IncludeNetworkXml, cancellation, out fragment, out warning))
+                            snapshot.Metrics.AnalysisCacheHits++;
+                        else
+                        {
+                            snapshot.Metrics.AnalysisCacheMisses++;
+                            if (warning != null) { snapshot.Metrics.CacheWarnings++; snapshot.Notes.Add(warning); }
+                            var single = new ExportSnapshot { Artifacts = new List<ExportArtifact> { artifact }, IsDemo = snapshot.IsDemo };
+                            fragment = new AnalysisFragment { Version = AnalysisCache.ParserVersion,
+                                Analysis = AnalyzeUncached(directory, single, cancellation, options.IncludeNetworkXml), ContentHash = artifact.ContentSha256 };
+                            if (cache != null && fragment.Analysis.Blocks.Count == 1 && !fragment.Analysis.Warnings.Any(w => w.Contains("analisi incompleta")))
+                                try { cache.Save(directory, artifact, hash, options.IncludeNetworkXml, fragment, cancellation); }
+                                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                                { snapshot.Metrics.CacheWarnings++; snapshot.Notes.Add("Cache analisi non aggiornata: " + ex.Message); }
+                        }
+                        artifact.ContentSha256 = fragment.ContentHash;
+                        result.Blocks.AddRange(fragment.Analysis.Blocks); result.Symbols.AddRange(fragment.Analysis.Symbols);
+                        result.Dependencies.AddRange(fragment.Analysis.Dependencies); result.Warnings.AddRange(fragment.Analysis.Warnings);
+                    }
+                    ResolveDependencies(result);
+                    result.Warnings = result.Warnings.Distinct(StringComparer.Ordinal).ToList();
+                }
+                result.CrossReferences.AddRange(snapshot.CrossReferences ?? new List<PlcCrossReference>());
+                foreach (var reference in result.CrossReferences)
+                    result.Symbols.Add(new SymbolEvidence { ArtifactId = reference.QueriedArtifactId, Name = reference.SourceName,
+                        Block = reference.ReferenceName, Plc = reference.Plc, Project = reference.Project, File = "crossreferences.json", Network = "",
+                        Location = reference.Location, Address = reference.SourceAddress, Access = reference.Access, Evidence = reference.Provider + " CrossReference" });
+                return result;
+            }
+            finally
+            {
+                snapshot.Metrics.AnalysisMilliseconds = timer.ElapsedMilliseconds;
+                snapshot.Metrics.ManagedBytesAfter = GC.GetTotalMemory(false);
+            }
+        }
+        private static ProjectAnalysis AnalyzeUncached(string directory, ExportSnapshot snapshot, CancellationToken cancellation, bool includeXml)
         {
             var analysis = new ProjectAnalysis();
             foreach (var artifact in snapshot.Artifacts.Where(a => a.RelativePath != null))
@@ -32,7 +85,7 @@ namespace TiaAnalyzer.Export
                     var block = new BlockAnalysis { ArtifactId = artifact.Id, Name = artifact.Name, File = artifact.RelativePath,
                         Project = artifact.Project, Plc = artifact.Plc, Unit = Unit(artifact.Group), Kind = artifact.Kind };
                     analysis.Blocks.Add(block);
-                    ReadDeclarations(document, block, analysis);
+                    var declarations = ReadDeclarations(document, block, analysis);
                     var instance = document.Descendants().FirstOrDefault(e => e.Name.LocalName == "InstanceOfName");
                     if (instance != null && !string.IsNullOrWhiteSpace(instance.Value))
                         AddDependency(analysis, block, instance.Value, "InstanceOf", "", "XML InstanceOfName");
@@ -45,7 +98,7 @@ namespace TiaAnalyzer.Export
                         var network = new NetworkEvidence { Id = (string)unit.Attribute("ID") ?? (block.Networks.Count + 1).ToString(),
                             Language = AttributeValue(unit, "ProgrammingLanguage") ?? artifact.Language,
                             Source = structured == null ? null : Render(structured),
-                            GraphXml = source.ToString(SaveOptions.DisableFormatting) };
+                            GraphXml = includeXml ? source.ToString(SaveOptions.DisableFormatting) : null };
                         block.Networks.Add(network);
                         foreach (var call in source.Descendants().Where(e => e.Name.LocalName == "CallInfo"))
                         {
@@ -58,8 +111,8 @@ namespace TiaAnalyzer.Export
                                     name = string.Join(".", instanceAccess.Elements().Where(e => e.Name.LocalName == "Component").Select(e => (string)e.Attribute("Name")));
                                     if ((string)instanceAccess.Attribute("Scope") == "LocalVariable")
                                     {
-                                        var declaration = analysis.Symbols.FirstOrDefault(s => s.ArtifactId == block.ArtifactId && s.Name == name && s.Evidence == "Declaration");
-                                        name = declaration?.DataType?.Trim('"') ?? "#" + name;
+                                        string datatype;
+                                        name = declarations.TryGetValue(name, out datatype) && datatype != null ? datatype.Trim('"') : "#" + name;
                                     }
                                 }
                             }
@@ -91,20 +144,25 @@ namespace TiaAnalyzer.Export
                     analysis.Warnings.Add(artifact.RelativePath + ": analisi incompleta: " + ex.Message);
                 }
             }
+            ResolveDependencies(analysis);
+            analysis.Warnings.Add("Riferimenti XML e candidati SCL sono evidenze statiche; i cross-reference Siemens, quando disponibili, sono conservati separatamente.");
+            analysis.Warnings.Add("Il testo SCL è una ricostruzione dei token: per sintassi non riconosciuta, accessi indicizzati e multi-istanze fare riferimento al NetworkSource XML originale.");
+            analysis.Warnings.Add("LAD/FBD/GRAPH richiedono analisi della rete completa: XML originali sempre presenti; nessun valore runtime disponibile.");
+            return analysis;
+        }
+        private static void ResolveDependencies(ProjectAnalysis analysis)
+        {
             var byId = analysis.Blocks.ToDictionary(b => b.ArtifactId);
             var byName = analysis.Blocks.ToLookup(b => Tuple.Create(b.Project, b.Plc, b.Unit, b.Name.ToUpperInvariant()));
             foreach (var dependency in analysis.Dependencies)
             {
                 var owner = byId[dependency.FromId];
+                dependency.TargetId = null;
                 var candidates = byName[Tuple.Create(owner.Project, owner.Plc, owner.Unit, dependency.TargetName.ToUpperInvariant())].Where(b => b.Kind != "TagTable" &&
                     (dependency.Relation == "Type" ? b.Kind == "UDT" : b.Kind != "UDT")).ToList();
                 dependency.Resolution = candidates.Count == 1 ? "Resolved" : candidates.Count > 1 ? "Ambiguous" : "ExternalOrUnresolved";
                 if (candidates.Count == 1) dependency.TargetId = candidates[0].ArtifactId;
             }
-            analysis.Warnings.Add("Riferimenti estratti dagli XML e candidati testuali SCL: non sono cross-reference ufficiali Siemens né una prova dei valori runtime.");
-            analysis.Warnings.Add("Il testo SCL è una ricostruzione dei token: per sintassi non riconosciuta, accessi indicizzati e multi-istanze fare riferimento al NetworkSource XML conservato integralmente.");
-            analysis.Warnings.Add("LAD/FBD/GRAPH e linguaggi non ricostruiti sono conservati negli XML delle reti; polarità, temporizzatori, sequenze e interblocchi richiedono analisi della rete completa.");
-            return analysis;
         }
         public static IReadOnlyList<SymbolEvidence> Search(ProjectAnalysis analysis, string query)
         {
@@ -136,18 +194,21 @@ namespace TiaAnalyzer.Export
         {
             return element.Elements().FirstOrDefault(e => e.Name.LocalName == "AttributeList")?.Elements().FirstOrDefault(e => e.Name.LocalName == name)?.Value;
         }
-        private static void ReadDeclarations(XDocument document, BlockAnalysis block, ProjectAnalysis analysis)
+        private static Dictionary<string, string> ReadDeclarations(XDocument document, BlockAnalysis block, ProjectAnalysis analysis)
         {
+            var declarations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var member in document.Descendants().Where(e => e.Name.LocalName == "Member"))
             {
                 var names = member.AncestorsAndSelf().Where(e => e.Name.LocalName == "Member").Reverse().Select(e => (string)e.Attribute("Name"));
                 var section = member.Ancestors().FirstOrDefault(e => e.Name.LocalName == "Section");
-                AddSymbol(analysis, block, "", string.Join(".", names), (string)section?.Attribute("Name"), "Declaration", (string)member.Attribute("Datatype"), null);
+                var name = string.Join(".", names); declarations[name] = (string)member.Attribute("Datatype");
+                AddSymbol(analysis, block, "", name, (string)section?.Attribute("Name"), "Declaration", (string)member.Attribute("Datatype"), null);
                 foreach (Match type in Symbols.Matches((string)member.Attribute("Datatype") ?? ""))
                     if (type.Value.StartsWith("\"")) AddDependency(analysis, block, type.Value.Trim('"').Replace("\"\"", "\""), "Type", "", "XML Datatype");
             }
             foreach (var tag in document.Descendants().Where(e => e.Name.LocalName == "SW.Tags.PlcTag" || e.Name.LocalName == "SW.Tags.PlcConstant"))
                 AddSymbol(analysis, block, "", AttributeValue(tag, "Name"), "GlobalVariable", "Tag declaration", AttributeValue(tag, "DataTypeName"), AttributeValue(tag, "LogicalAddress"));
+            return declarations;
         }
         private static void AddSymbol(ProjectAnalysis analysis, BlockAnalysis block, string network, string name, string scope, string evidence, string dataType, string address)
         {
