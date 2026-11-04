@@ -15,6 +15,7 @@ namespace TiaAnalyzer.Export
         public List<AssignmentEvidence> Assignments { get; set; } = new List<AssignmentEvidence>();
         public List<CallBinding> Calls { get; set; } = new List<CallBinding>();
         public List<LogicCoverage> Coverage { get; set; } = new List<LogicCoverage>();
+        public WriteReport Writes { get; set; } = new WriteReport();
     }
     public sealed class BlockAnalysis
     {

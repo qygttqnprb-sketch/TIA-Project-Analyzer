@@ -36,6 +36,7 @@ internal static class Program
             await CacheChecks.Run(Check);
             await LogicChecks.Run(Check);
             await NetworkChecks.Run(Check);
+            GraphChecks.Run(Check);
             Console.WriteLine(passed + " checks passed on .NET 10 with synthetic/fake data. No real TIA project attached. Run TiaAnalyzer.WpfChecks for net48/WPF.");
         }
         finally { foreach (var service in services) await service.ShutdownAsync(); }

@@ -68,6 +68,7 @@ namespace TiaAnalyzer.Export
                     result.Symbols.Add(new SymbolEvidence { ArtifactId = reference.QueriedArtifactId, Name = reference.SourceName,
                         Block = reference.ReferenceName, Plc = reference.Plc, Project = reference.Project, File = "crossreferences.json", Network = "",
                         Location = reference.Location, Address = reference.SourceAddress, Access = reference.Access, Evidence = reference.Provider + " CrossReference" });
+                result.Writes = WriteAnalyzer.Analyze(result, cancellation);
                 return result;
             }
             finally
@@ -104,6 +105,8 @@ namespace TiaAnalyzer.Export
                             Source = structured == null ? null : Render(structured),
                             GraphXml = includeXml ? source.ToString(SaveOptions.DisableFormatting) : null };
                         block.Networks.Add(network);
+                        if (structured == null && source.Elements().Any(e => e.Name.LocalName == "FlgNet"))
+                            GraphLogicAnalyzer.Parse(analysis, block, network, source, cancellation);
                         foreach (var call in source.Descendants().Where(e => e.Name.LocalName == "CallInfo"))
                         {
                             var name = (string)call.Attribute("Name");
@@ -152,7 +155,7 @@ namespace TiaAnalyzer.Export
             ResolveDependencies(analysis);
             analysis.Warnings.Add("Riferimenti XML e candidati SCL sono evidenze statiche; i cross-reference Siemens, quando disponibili, sono conservati separatamente.");
             analysis.Warnings.Add("Il testo SCL è una ricostruzione dei token: per sintassi non riconosciuta, accessi indicizzati e multi-istanze fare riferimento al NetworkSource XML originale.");
-            analysis.Warnings.Add("LAD/FBD/GRAPH richiedono analisi della rete completa: XML originali sempre presenti; nessun valore runtime disponibile.");
+            analysis.Warnings.Add("LAD/FBD: solo il sottoinsieme booleano dichiarato in copertura. GRAPH, timer e fronti richiedono l'XML completo; nessun valore runtime disponibile.");
             return analysis;
         }
         private static void ResolveDependencies(ProjectAnalysis analysis)

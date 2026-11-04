@@ -11,6 +11,9 @@ namespace TiaAnalyzer.Export
     }
     public sealed class AssignmentEvidence
     {
+        public string Language { get; set; } = "SCL";
+        public string Operation { get; set; } = "Assign";
+        public string Location { get; set; }
         public string ArtifactId { get; set; }
         public string Network { get; set; }
         public int Line { get; set; }

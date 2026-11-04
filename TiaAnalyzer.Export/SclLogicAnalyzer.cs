@@ -68,6 +68,7 @@ namespace TiaAnalyzer.Export
         }
         public static void Parse(ProjectAnalysis analysis, CancellationToken cancellation)
         {
+            var parsed = new HashSet<string>(analysis.Coverage.Select(c => c.ArtifactId + "\0" + c.Network));
             foreach (var block in analysis.Blocks)
             {
                 if (block.Networks.Count == 0 && new[] { "OB", "FB", "FC" }.Contains(block.Kind))
@@ -75,6 +76,7 @@ namespace TiaAnalyzer.Export
                 foreach (var network in block.Networks)
                 {
                     cancellation.ThrowIfCancellationRequested();
+                    if (network.Source == null && parsed.Contains(block.ArtifactId + "\0" + network.Id)) continue;
                     var coverage = new LogicCoverage { ArtifactId = block.ArtifactId, Network = network.Id, Supported = false };
                     analysis.Coverage.Add(coverage);
                     if (network.Source == null) { coverage.Reason = "Linguaggio grafico/non SCL: leggere l'XML originale."; continue; }
