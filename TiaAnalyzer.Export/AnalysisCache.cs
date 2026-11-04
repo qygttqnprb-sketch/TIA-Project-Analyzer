@@ -20,7 +20,7 @@ namespace TiaAnalyzer.Export
     }
     internal sealed class AnalysisCache
     {
-        internal const string ParserVersion = "0.8.0";
+        internal const string ParserVersion = "0.8.1";
         private readonly ContentFileCache cache;
         public AnalysisCache(string directory) { cache = new ContentFileCache(Path.Combine(directory, "analysis-v1")); }
         private static string Key(ExportArtifact artifact, string hash, bool includeXml)

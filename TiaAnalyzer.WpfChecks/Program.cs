@@ -17,6 +17,11 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--graph-only")
+        {
+            try { OpennessRuntime.Configure(); GraphChecks.Run(Require); Console.WriteLine("Graph and writer checks passed on net48; no TIA project attached."); return 0; }
+            catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+        }
         var output = Path.GetFullPath(args.Length == 0 ? Path.Combine("artifacts", "wpf-" + Guid.NewGuid().ToString("N")) : args[0]);
         Directory.CreateDirectory(output);
         var bindingErrors = new StringWriter();
@@ -67,6 +72,11 @@ internal static class Program
         Require(vm.PerformanceSummary.Contains("XML riusati 5") && vm.PerformanceSummary.Contains("cache analisi 6"), "warm cache and performance bindings");
         vm.SearchTerm = "SafetyOK"; vm.SearchSymbolsCommand.Execute(null); await Dispatcher.Yield();
         Require(vm.SymbolMatches.Count == 3, "symbol query binds declaration, XML and demo cross-reference");
+        vm.SearchTerm = "MotorRun"; await vm.WritersCommand.ExecuteAsync(); await Dispatcher.Yield();
+        Require(vm.WriterReport.Contains("più siti nello stesso blocco") && ((TextBox)window.FindName("WriterReport")).Text.Contains("MotorRun"), "writer report binds all conditional motor sites");
+        vm.SearchTerm = "ResetFault"; await Dispatcher.Yield();
+        Require(!vm.WriterReport.Contains("più siti nello stesso blocco"), "new writer query invalidates stale displayed sites");
+        vm.SearchTerm = "MotorRun"; await vm.WritersCommand.ExecuteAsync(); await Dispatcher.Yield();
         vm.PreviousSnapshotPath = firstZip; await vm.CompareCommand.ExecuteAsync(); await Dispatcher.Yield();
         Require(vm.ComparisonStatus.StartsWith("0 differenze"), "comparison command completes on WPF dispatcher");
         await vm.TraceCommand.ExecuteAsync(); await Dispatcher.Yield();
@@ -74,12 +84,17 @@ internal static class Program
         vm.FocusedPackage = true; await vm.ExportZipCommand.ExecuteAsync(); await Dispatcher.Yield();
         Require(vm.ExportStatus.Contains("ZIP mirato: 4 di 6"), "focused ZIP coverage is shown in the UI");
         Require(vm.ComparisonStatus.Contains("eseguire il confronto") && !vm.TraceReport.Contains("JamDetected"), "new export invalidates stale comparison and trace");
+        Require(!vm.WriterReport.Contains("più siti nello stesso blocco"), "new export invalidates stale writer report");
         await vm.TraceCommand.ExecuteAsync(); await Dispatcher.Yield();
+        await vm.WritersCommand.ExecuteAsync(); await Dispatcher.Yield();
         var scroll = (ScrollViewer)window.FindName("MainScroll");
         scroll.ScrollToTop(); await Dispatcher.Yield(); Capture(window, Path.Combine(output, "overview.png"));
         var exportCard = (FrameworkElement)window.FindName("ExportCard");
         var offset = exportCard.TranslatePoint(new Point(), scroll).Y + scroll.VerticalOffset;
         scroll.ScrollToVerticalOffset(offset); await Dispatcher.Yield(); Capture(window, Path.Combine(output, "export.png"));
+        var analysisCard = (FrameworkElement)window.FindName("AnalysisCard");
+        offset = analysisCard.TranslatePoint(new Point(), scroll).Y + scroll.VerticalOffset;
+        scroll.ScrollToVerticalOffset(offset); await Dispatcher.Yield(); Capture(window, Path.Combine(output, "writers.png"));
         scroll.ScrollToEnd(); await Dispatcher.Yield(); Capture(window, Path.Combine(output, "comparison.png"));
         window.Width = 900; window.UpdateLayout();
         offset = exportCard.TranslatePoint(new Point(), scroll).Y + scroll.VerticalOffset;

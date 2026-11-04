@@ -6,7 +6,6 @@ using System.Threading;
 using System.Xml.Linq;
 using TiaAnalyzer.Core;
 using TiaAnalyzer.Export;
-using TiaAnalyzer.Openness;
 
 internal static class GraphChecks
 {
@@ -45,6 +44,14 @@ internal static class GraphChecks
             new Dictionary<string, bool> { { "Auto", true }, { "JamDetected", false } }), "FBD negated gate output is retained");
         var disjunction = Parse(Gate("O", false), "FBD");
         check(Eval(disjunction.Assignments.Single().Value, new Dictionary<string, bool> { { "Auto", false }, { "JamDetected", true } }), "FBD OR direct output is a write site");
+        foreach (var kind in new[] { "A", "O" })
+            for (int row = 0; row < 4; row++)
+            {
+                bool left = (row & 1) != 0, right = (row & 2) != 0;
+                var gate = Parse(Gate(kind, false), "FBD");
+                check(Eval(gate.Assignments.Single().Value, new Dictionary<string, bool> { { "Auto", left }, { "JamDetected", right } }) ==
+                    (kind == "A" ? left && right : left || right), "FBD " + kind + " truth table, row " + row);
+            }
         var inverseCoil = Series();
         inverseCoil.Xml.Descendants(Ns + "Part").Single(e => (string)e.Attribute("Name") == "Coil").Add(new XElement(Ns + "Negated", new XAttribute("Name", "operand")));
         check(Eval(Parse(inverseCoil, "LAD").Assignments.Single().Value,
@@ -80,6 +87,19 @@ internal static class GraphChecks
         check(!Parse(invalid, "FBD").Coverage.Single().Supported, "gate cardinality bounds prevent oversized evaluation");
         var orphan = Series(); orphan.Wire(Ident("1"), Ident("2"));
         check(!Parse(orphan, "LAD").Coverage.Single().Supported, "unconsumed ambiguous wiring cannot be silently ignored");
+        var call = new Graph(); call.Variable("1", "MotorRun");
+        call.Xml.Element(Ns + "Parts").Add(new XElement(Ns + "Call", new XAttribute("UId", "10"), new XElement(Ns + "CallInfo",
+            new XAttribute("Name", "Helper"), new XElement(Ns + "Parameter", new XAttribute("Name", "Result"), new XAttribute("Section", "Output")))));
+        call.Wire(Pin("10", "Result"), Ident("1"));
+        var output = Parse(call, "FBD");
+        check(!output.Coverage.Single().Supported && output.Assignments.Single().Operation == "CallOutput" &&
+            !output.Assignments.Single().Supported && output.Assignments.Single().Value.Kind == "Unknown",
+            "typed graphical call outputs retain partial write evidence without invented values");
+        var malformed = Gate("A", false);
+        var access = malformed.Xml.Element(Ns + "Parts").Elements().First();
+        access.SetAttributeValue("Scope", "LiteralConstant"); access.RemoveNodes();
+        access.Add(new XElement(Ns + "Constant"), new XElement(Ns + "Constant"));
+        check(!Parse(malformed, "FBD").Coverage.Single().Supported, "malformed literal structure produces partial coverage rather than crashing project analysis");
         check(!Parse(parallel, "FBD").Coverage.Single().Supported, "LAD multiple-driver interpretation is never applied to FBD");
         WriteChecks(latch, check);
         IntegratedChecks(series, check);
@@ -128,20 +148,29 @@ internal static class GraphChecks
         try
         {
             var directory = Path.Combine(root, "snapshot");
-            var writer = new PlcExportWriter(directory, true, null, CancellationToken.None);
-            writer.Write("P", "PLC", "Blocks", "Motor", "FB", "LAD", false, file =>
-                new XDocument(new XElement("Document", new XElement("SW.Blocks.FB", new XElement("AttributeList", new XElement("Name", "Motor")),
+            Directory.CreateDirectory(directory);
+            var snapshot = new ExportSnapshot { IsDemo = true, Artifacts = new List<ExportArtifact> { new ExportArtifact {
+                Id = ExportPaths.Identity("P", "PLC", "Motor"), Project = "P", Plc = "PLC", Group = "Blocks", Name = "Motor",
+                Kind = "FB", Language = "LAD", Status = "Exported", RelativePath = "motor.xml" } } };
+            new XDocument(new XElement("Document", new XElement("SW.Blocks.FB", new XElement("AttributeList", new XElement("Name", "Motor")),
                     new XElement("ObjectList", new XElement("SW.Blocks.CompileUnit", new XAttribute("ID", "1"), new XElement("AttributeList",
-                        new XElement("ProgrammingLanguage", "LAD"), new XElement("NetworkSource", new XElement(graph.Xml)))))))).Save(file.FullName));
+                        new XElement("ProgrammingLanguage", "LAD"), new XElement("NetworkSource", new XElement(graph.Xml)))))))).Save(Path.Combine(directory, "motor.xml"));
             var options = new AnalysisOptions { CacheDirectory = Path.Combine(root, "cache"), IncludeNetworkXml = false };
-            var first = XmlProjectAnalyzer.Analyze(directory, writer.Snapshot, CancellationToken.None, options);
+            var first = XmlProjectAnalyzer.Analyze(directory, snapshot, CancellationToken.None, options);
             check(first.Blocks.Single().Networks.Single().GraphXml == null && first.Coverage.Single().Supported && first.Assignments.Count == 1,
                 "compact reports parse LAD directly from original XML without retaining a duplicate graph");
-            var warm = XmlProjectAnalyzer.Analyze(directory, writer.Snapshot, CancellationToken.None, options);
-            check(writer.Snapshot.Metrics.AnalysisCacheHits == 1 && warm.Assignments.Count == 1 && warm.Writes.Groups.Single().Sites.Count == 1,
+            var warm = XmlProjectAnalyzer.Analyze(directory, snapshot, CancellationToken.None, options);
+            check(snapshot.Metrics.AnalysisCacheHits == 1 && warm.Assignments.Count == 1 && warm.Writes.Groups.Single().Sites.Count == 1,
                 "graph evidence survives analysis cache restore and writer counts are recomputed");
             var trace = ConditionTracer.Trace(warm, "MotorRun", CancellationToken.None);
             check(trace.Steps.Any(s => s.Description.Contains("JamDetected")), "graphical coil conditions participate in symbol traces");
+            var traceText = ConditionTracer.Markdown(trace);
+            check(traceText.Contains("LAD modellato") && traceText.Contains("UId 13") && !traceText.Contains("riga SCL ricostruita 0"),
+                "graph trace cites actual part UID rather than inventing an SCL source line");
+            var files = AnalysisWriter.Write(directory, warm, CancellationToken.None);
+            WriteReport report; using (var stream = File.OpenRead(Path.Combine(directory, "writers.json"))) report = JsonFiles.Read<WriteReport>(stream);
+            check(files.Contains("writers.md") && report.Groups.Single().Sites.Single().Language == "LAD" &&
+                File.ReadAllText(Path.Combine(directory, "conditions.md")).Contains("LAD modellato"), "graph writer and conditions reports retain language and source provenance");
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

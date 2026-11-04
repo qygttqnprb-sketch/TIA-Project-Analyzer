@@ -70,6 +70,7 @@ namespace TiaAnalyzer.Export
                 Dependencies = analysis.Dependencies.Where(d => selected.Contains(d.FromId)).Select(d => new DependencyEvidence { FromId = d.FromId,
                     TargetName = d.TargetName, TargetId = d.TargetId != null && selected.Contains(d.TargetId) ? d.TargetId : null, Relation = d.Relation,
                     Network = d.Network, Evidence = d.Evidence, Resolution = d.TargetId != null && !selected.Contains(d.TargetId) ? "OutsideSelectedPackage" : d.Resolution }).ToList() };
+            result.Writes = WriteAnalyzer.Analyze(result, cancellation);
             return new FocusSelection { Plan = plan, Snapshot = subset, Analysis = result, Trace = trace };
         }
     }

@@ -12,25 +12,29 @@ namespace TiaAnalyzer.Export
     {
         public static IReadOnlyList<string> Write(string directory, ProjectAnalysis analysis, CancellationToken cancellation)
         {
-            var files = new List<string> { "analysis.json", "symbols.json", "dependencies.dot", "logic.md", "conditions.json", "conditions.md" };
+            var files = new List<string> { "analysis.json", "symbols.json", "dependencies.dot", "logic.md", "conditions.json", "conditions.md", "writers.json", "writers.md" };
+            analysis.Writes = WriteAnalyzer.Analyze(analysis, cancellation);
             JsonFiles.Write(ExportPaths.Resolve(directory, "analysis.json"), analysis);
             JsonFiles.Write(ExportPaths.Resolve(directory, "symbols.json"), analysis.Symbols);
             JsonFiles.Write(ExportPaths.Resolve(directory, "conditions.json"), analysis.Assignments);
-            var conditions = new StringBuilder("# Assegnazioni e condizioni SCL\n\nEvidenze offline del sottoinsieme supportato. Non sono valori runtime. Copertura completa in analysis.json.\n\n");
+            JsonFiles.Write(ExportPaths.Resolve(directory, "writers.json"), analysis.Writes);
+            PackageWriter.WriteText(directory, "writers.md", WriteAnalyzer.Markdown(analysis.Writes));
+            var conditions = new StringBuilder("# Assegnazioni e condizioni PLC\n\nEvidenze offline del sottoinsieme supportato. Non sono valori runtime. Copertura in analysis.json.\nIl testo seguente è pseudocodice delle evidenze, non un sorgente da importare.\n\n");
             var byId = analysis.Blocks.ToDictionary(b => b.ArtifactId);
             foreach (var assignment in analysis.Assignments)
             {
                 cancellation.ThrowIfCancellationRequested(); var block = byId[assignment.ArtifactId];
-                conditions.Append("## ").AppendLine(PackageWriter.Text(block.Plc + " / " + block.Name + " / rete " + assignment.Network + " / riga " + assignment.Line));
-                conditions.AppendLine(assignment.Supported ? "\nSCL modellato.\n" : "\n**PARZIALE: leggere la rete completa.**\n");
-                conditions.AppendLine(Code(assignment.Target + " := " + assignment.Value.Text + ";\n// QUANDO " + assignment.Guard.Text, "scl"));
+                conditions.Append("## ").AppendLine(PackageWriter.Text(block.Plc + " / " + block.Name + " / rete " + assignment.Network + " / " +
+                    (assignment.Location ?? "riga SCL ricostruita " + assignment.Line)));
+                conditions.AppendLine(assignment.Supported ? "\n" + PackageWriter.Text(assignment.Language ?? "SCL") + " modellato.\n" : "\n**PARZIALE: leggere la rete completa.**\n");
+                conditions.AppendLine(Code(assignment.Target + " := " + assignment.Value.Text + ";\n// " + (assignment.Operation ?? "Assign") + " QUANDO " + assignment.Guard.Text, "text"));
                 conditions.Append("Fonte XML: ").AppendLine(PackageWriter.Text(block.File));
             }
             foreach (var coverage in analysis.Coverage.Where(c => !c.Supported))
                 conditions.Append("\n- NON MODELLATO: ").Append(PackageWriter.Text(byId[coverage.ArtifactId].Name + " / " + coverage.Network)).Append(": ").AppendLine(PackageWriter.Text(coverage.Reason));
             PackageWriter.WriteText(directory, "conditions.md", conditions.ToString());
             var graph = new StringBuilder("digraph PLC {\n  rankdir=LR;\n");
-            var report = new StringBuilder("# Evidenze della logica PLC\n\n");
+            var report = new StringBuilder("# Evidenze della logica PLC\n\nConsultare [siti di scrittura](writers.md) e [condizioni](conditions.md).\n\n");
             foreach (var warning in analysis.Warnings) report.Append("- ").AppendLine(PackageWriter.Text(warning));
             report.AppendLine("\n## Blocchi e reti\n");
             Directory.CreateDirectory(Path.Combine(directory, "blocks"));

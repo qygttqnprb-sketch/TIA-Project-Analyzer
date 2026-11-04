@@ -1,4 +1,4 @@
-# Verifica Windows · V0.7
+# Verifica Windows · V0.8
 
 Compilazione Siemens, WPF demo e progetto PLC reale sono verifiche distinte.
 
@@ -47,7 +47,7 @@ fuori schermo non copre tutte le configurazioni desktop.
 7. Nessun file nel progetto o richiesta di salvataggio causata dall'app; file solo
    nella destinazione scelta. Nessuna DLL Siemens nell'output.
 
-## Verifiche V0.6/V0.7 sul progetto di prova
+## Verifiche V0.6–V0.8 sul progetto di prova
 
 1. Confrontare crossreferences.json con i riferimenti incrociati di TIA: accesso,
    posizione, nome, indirizzo e provenienza. Verificare anche membri senza oggetto
@@ -58,7 +58,10 @@ fuori schermo non copre tutte le configurazioni desktop.
 3. Provare un blocco non consistente: nessuna compilazione automatica. Per assenza
    di impronte usare export normale, con errore per oggetto se non è esportabile.
 4. Verificare le guardie IF/ELSIF/ELSE e i parametri tra chiamanti/istanze su casi noti.
-   IN_OUT, output associati, cicli, salti e reti grafiche devono dichiarare copertura parziale.
+   IN_OUT, output associati, cicli, salti e reti grafiche non supportate devono dichiarare copertura parziale.
+   Per LAD/FBD confrontare serie/paralleli, polarità, porte A/O e bobine con TIA.
+   Verificare Set/Reset senza inferire il mantenimento dello stato o le priorità.
+   In writers.md controllare i siti tra blocchi e la separazione delle variabili locali.
 5. Confrontare ZIP completo e mirato: inventario/esclusioni espliciti, nessuna falsa
    cancellazione nel confronto, selezione ampliata quando la copertura è incerta.
 6. Cambiare un consenso SCL, un contatto LAD e l'ordine delle reti: report prima/dopo

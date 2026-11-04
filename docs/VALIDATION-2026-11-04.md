@@ -1,5 +1,26 @@
 # Esiti verificati · 4 novembre 2026
 
+## Aggiornamento V0.8
+
+- 195 controlli automatici .NET 10 con dati sintetici/simulati.
+- 51 controlli di reti grafiche e scritture ripetuti su .NET Framework 4.8:
+  tabelle di verità, rami paralleli, negazioni, Set/Reset, ambiti, cache,
+  XML malformati e uscite di chiamata dichiarate ma non modellate.
+- 18 verifiche WPF/net48 superate, zero errori di binding: ricerca dei siti,
+  invalidazione dei risultati, report, ZIP completi/mirati e confronto.
+  Verificate le schermate a 1180 e 900 pixel.
+- Build Debug e Release x64 contro le DLL Siemens V21 installate: riuscite
+  senza errori/avvisi. Nessuna DLL Siemens redistribuita.
+- Il pacchetto completo demo include writers.json/md e 29 file dichiarati.
+  La demo MotorRun conserva due rami esclusivi nello stesso blocco:
+  MultipleSites, senza dichiarare conflitto o ordine dell'ultima scrittura.
+- L'analisi LAD/FBD riguarda il sottoinsieme FlgNet v4 documentato in
+  [GRAPH-WRITERS.md](GRAPH-WRITERS.md). Le prove usano esclusivamente dati
+  sintetici; il contenuto reale di un progetto V21 resta da validare.
+
+I risultati precedenti sotto sono conservati come storico, non aggiunti ai
+conteggi della suite attuale.
+
 ## Aggiornamento V0.7
 
 - 141 controlli automatici .NET 10 superati con dati sintetici/simulati.

@@ -82,6 +82,9 @@ namespace TiaAnalyzer.Export
                     if (net.Ends.Count < 2 || net.Ends.Count > 2048) throw new Unsupported("Numero di terminali del collegamento non supportato.");
                     foreach (var end in net.Ends)
                     {
+                        if (end.HasElements || end.Attributes().Any(a => a.Name.LocalName != "UId" &&
+                            (end.Name.LocalName != "NameCon" || a.Name.LocalName != "Name")))
+                            throw new Unsupported("Proprietà di collegamento non modellate.");
                         if (end.Name.LocalName == "NameCon")
                         {
                             XElement part; var pin = (string)end.Attribute("Name"); var uid = (string)end.Attribute("UId");
@@ -110,7 +113,7 @@ namespace TiaAnalyzer.Export
             private int Cardinality(XElement part)
             {
                 var cards = part.Elements().Where(e => e.Name.LocalName == "TemplateValue" && Name(e) == "Card").ToList(); int count;
-                if (cards.Count != 1 || !int.TryParse(cards[0].Value, out count) || count < 2 || count > 64)
+                if (cards.Count != 1 || (string)cards[0].Attribute("Type") != "Cardinality" || !int.TryParse(cards[0].Value, out count) || count < 2 || count > 64)
                     throw new Unsupported("Cardinalità A/O non supportata.");
                 return count;
             }
@@ -144,6 +147,10 @@ namespace TiaAnalyzer.Export
             private static LogicExpression Unknown(string reason) { return new LogicExpression { Kind = "Unknown", Text = "NON MODELLATO: " + reason }; }
             private static LogicExpression Combine(string kind, LogicExpression left, LogicExpression right = null)
             {
+                if (kind == "And" && left.Kind == "Literal" && left.Text == "TRUE") return right;
+                if (kind == "And" && right?.Kind == "Literal" && right.Text == "TRUE") return left;
+                if (kind == "Or" && left.Kind == "Literal" && left.Text == "FALSE") return right;
+                if (kind == "Or" && right?.Kind == "Literal" && right.Text == "FALSE") return left;
                 if (left.Text.Length + (right?.Text.Length ?? 0) > 8192) throw new Unsupported("Espressione grafica troppo estesa.");
                 return SclLogicAnalyzer.Combine(kind, left, right);
             }

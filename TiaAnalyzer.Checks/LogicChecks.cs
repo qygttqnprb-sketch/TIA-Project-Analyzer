@@ -35,6 +35,9 @@ internal static class LogicChecks
                 check(manifest.Artifacts.Count == 4 && manifest.Selection.TotalArtifacts == 6 && manifest.Selection.ExcludedIds.Count == 2 &&
                     archive.GetEntry("inventory.json") != null && archive.GetEntry("trace.md") != null, "focused ZIP declares coverage exclusions inventory and condition evidence");
                 check(snapshot.Artifacts.Where(a => !manifest.Artifacts.Any(m => m.Id == a.Id)).All(a => archive.GetEntry(a.RelativePath) == null), "excluded XML cannot leak into a focused ZIP");
+                WriteReport writers; using (var stream = archive.GetEntry("writers.json").Open()) writers = JsonFiles.Read<WriteReport>(stream);
+                check(writers.Groups.SelectMany(g => g.Sites).All(s => manifest.Artifacts.Any(a => a.Id == s.ArtifactId)),
+                    "focused writer counts contain only sites from included artifacts");
             }
             var branches = Parse("IF #A THEN #Out := TRUE; ELSIF #B THEN #Out := FALSE; ELSE #Out := TRUE; END_IF;");
             foreach (var row in new[] { new[] { true, true, true }, new[] { true, false, true }, new[] { false, true, false }, new[] { false, false, true } })

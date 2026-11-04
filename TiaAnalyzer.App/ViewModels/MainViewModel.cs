@@ -34,6 +34,7 @@ namespace TiaAnalyzer.App.ViewModels
         private string performanceSummary = "I tempi saranno misurati alla prossima esportazione.";
         private bool focusedPackage;
         private string traceQuery = "MotorRun", traceReport = "Esportare uno snapshot, poi indicare un simbolo per seguire le condizioni.";
+        private string writerReport = "Esportare uno snapshot per consultare i siti di scrittura.", writerSummary = "Nessuna analisi delle scritture disponibile.";
         private ITiaConnectionService Service { get { return demo ? demoConnection : realConnection; } }
         public MainViewModel() : this(new SiemensEnvironmentProbe(), new MockEnvironmentProbe(),
             new TiaConnectionService(new SiemensBackend()), new TiaConnectionService(new DemoBackend())) { }
@@ -50,6 +51,7 @@ namespace TiaAnalyzer.App.ViewModels
             CompareCommand = Command(CompareAsync, () => !busy && !string.IsNullOrWhiteSpace(previousSnapshotPath) && !string.IsNullOrWhiteSpace(currentSnapshotPath));
             SearchSymbolsCommand = new RelayCommand(SearchSymbols, () => !busy && lastAnalysis != null && !string.IsNullOrWhiteSpace(searchTerm));
             TraceCommand = Command(TraceAsync, () => !busy && lastAnalysis != null && !string.IsNullOrWhiteSpace(traceQuery));
+            WritersCommand = Command(WritersAsync, () => !busy && lastAnalysis != null);
             CancelExportCommand = new AsyncCommand(() => { exportCancellation?.Cancel(); return Task.CompletedTask; },
                 () => exportCancellation != null && !exportCancellation.IsCancellationRequested, ReportError);
         }
@@ -73,6 +75,7 @@ namespace TiaAnalyzer.App.ViewModels
         public AsyncCommand CompareCommand { get; }
         public RelayCommand SearchSymbolsCommand { get; }
         public AsyncCommand TraceCommand { get; }
+        public AsyncCommand WritersCommand { get; }
         public bool IsDemo
         {
             get { return demo; }
@@ -119,7 +122,8 @@ namespace TiaAnalyzer.App.ViewModels
         public string LastExportDirectory { get { return lastExportDirectory; } }
         public string LastZipPath { get { return lastZipPath; } }
         public string Question { get { return question; } set { if (busy) return; question = value; Notify(); } }
-        public string SearchTerm { get { return searchTerm; } set { searchTerm = value; Notify(); RefreshCommands(); } }
+        public string SearchTerm { get { return searchTerm; } set { if (busy || searchTerm == value) return; searchTerm = value; Notify();
+            writerReport = "Ricerca aggiornata: mostrare nuovamente le scritture."; Notify(nameof(WriterReport)); RefreshCommands(); } }
         public string SymbolSummary { get { return symbolSummary; } }
         public IReadOnlyList<SymbolEvidence> SymbolMatches { get { return symbolMatches; } }
         public string PreviousSnapshotPath { get { return previousSnapshotPath; } set { if (busy) return; previousSnapshotPath = value; Notify(); InvalidateComparison(); RefreshCommands(); } }
@@ -130,8 +134,11 @@ namespace TiaAnalyzer.App.ViewModels
         public bool CompactReports { get { return compactReports; } set { if (busy) return; compactReports = value; Notify(); } }
         public string PerformanceSummary { get { return performanceSummary; } }
         public bool FocusedPackage { get { return focusedPackage; } set { if (busy) return; focusedPackage = value; Notify(); } }
-        public string TraceQuery { get { return traceQuery; } set { if (busy) return; traceQuery = value; Notify(); RefreshCommands(); } }
+        public string TraceQuery { get { return traceQuery; } set { if (busy || traceQuery == value) return; traceQuery = value; Notify();
+            traceReport = "Simbolo aggiornato: ricalcolare la traccia."; Notify(nameof(TraceReport)); RefreshCommands(); } }
         public string TraceReport { get { return traceReport; } }
+        public string WriterReport { get { return writerReport; } }
+        public string WriterSummary { get { return writerSummary; } }
         public IList<EnvironmentCheck> Checks { get { return checks; } }
         public IReadOnlyList<ProjectComponent> Components { get { return components; } }
         public string ComponentSummary { get { return components.Count + (demo ? " componenti sintetici" : " elementi letti dai soli progetti già aperti"); } }
@@ -186,6 +193,8 @@ namespace TiaAnalyzer.App.ViewModels
             var directory = Path.Combine(root, (demo ? "DEMO_" : "TIA_") + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0, 8));
             lastZipPath = null; lastExportDirectory = null; lastAnalysis = null; symbolMatches = new List<SymbolEvidence>();
             traceReport = "Traccia da ricalcolare dopo la nuova raccolta."; Notify(nameof(TraceReport));
+            writerReport = "Scritture da ricalcolare dopo la nuova raccolta."; writerSummary = "Analisi delle scritture in attesa.";
+            Notify(nameof(WriterReport)); Notify(nameof(WriterSummary));
             Notify(nameof(LastZipPath)); Notify(nameof(LastExportDirectory)); Notify(nameof(SymbolMatches));
             using (var cancellation = new CancellationTokenSource())
             {
@@ -224,6 +233,9 @@ namespace TiaAnalyzer.App.ViewModels
                     lastExportDirectory = directory; Notify(nameof(LastExportDirectory));
                     lastZipPath = archive; Notify(nameof(LastZipPath));
                     lastAnalysis = analysis;
+                    writerSummary = analysis.Writes.Groups.Count(g => g.Sites.Count > 1) + " simboli con più siti; " +
+                        analysis.Writes.Groups.Count(g => g.DistinctBlocks > 1) + " scritti da blocchi diversi. Nessun conflitto dedotto.";
+                    Notify(nameof(WriterSummary));
                     symbolSummary = analysis.Symbols.Count + " evidenze di simboli nella raccolta locale completa."; Notify(nameof(SymbolSummary));
                     currentSnapshotPath = archive ?? Path.Combine(directory, "manifest.json"); Notify(nameof(CurrentSnapshotPath));
                     InvalidateComparison();
@@ -249,6 +261,21 @@ namespace TiaAnalyzer.App.ViewModels
             Directory.CreateDirectory(output); JsonFiles.Write(Path.Combine(output, "trace.json"), trace);
             traceReport = ConditionTracer.Markdown(trace); PackageWriter.WriteText(output, "trace.md", traceReport);
             Notify(nameof(TraceReport)); Log("Traccia condizioni: " + Path.Combine(output, "trace.md"));
+        }
+        private async Task WritersAsync()
+        {
+            var output = Path.Combine(Path.GetFullPath(exportRoot), "Writers_" + Guid.NewGuid().ToString("N"));
+            var query = searchTerm;
+            var preview = await Task.Run(() =>
+            {
+                var selected = WriteAnalyzer.Select(lastAnalysis.Writes, query);
+                Directory.CreateDirectory(output);
+                JsonFiles.Write(Path.Combine(output, "writers.json"), selected);
+                PackageWriter.WriteText(output, "writers.md", WriteAnalyzer.Markdown(selected));
+                return WriteAnalyzer.Markdown(selected, 100);
+            });
+            writerReport = (string.IsNullOrWhiteSpace(query) ? "Tutti i simboli" : "Ricerca: " + query) + "\n\n" + preview;
+            Notify(nameof(WriterReport)); Log("Siti di scrittura: " + Path.Combine(output, "writers.md"));
         }
         private void SearchSymbols()
         {
@@ -318,6 +345,8 @@ namespace TiaAnalyzer.App.ViewModels
             lastZipPath = null; Notify(nameof(LastZipPath));
             lastAnalysis = null; symbolMatches = new List<SymbolEvidence>(); symbolSummary = "Esportare uno snapshot per cercare simboli.";
             traceReport = "Esportare uno snapshot, poi indicare un simbolo per seguire le condizioni."; Notify(nameof(TraceReport));
+            writerReport = "Esportare uno snapshot per consultare i siti di scrittura."; writerSummary = "Nessuna analisi delle scritture disponibile.";
+            Notify(nameof(WriterReport)); Notify(nameof(WriterSummary));
             Notify(nameof(SymbolMatches)); Notify(nameof(SymbolSummary));
             SetExportStatus("Collegare un'istanza per esportare XML e manifest.");
             NotifySession();
@@ -337,6 +366,7 @@ namespace TiaAnalyzer.App.ViewModels
             ExportXmlCommand?.Refresh(); ExportZipCommand?.Refresh(); CancelExportCommand?.Refresh();
             CompareCommand?.Refresh(); SearchSymbolsCommand?.Refresh();
             TraceCommand?.Refresh();
+            WritersCommand?.Refresh();
         }
     }
 }

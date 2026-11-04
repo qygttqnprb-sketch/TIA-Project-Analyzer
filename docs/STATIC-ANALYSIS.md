@@ -1,4 +1,4 @@
-# Analisi statica e confronto · V0.5
+# Analisi statica e confronto · V0.8
 
 Ogni export genera `analysis.json`, `symbols.json`, `dependencies.dot`, `logic.md`
 e `blocks/<id>.md`. I documenti includono file originali, ID reti, testo SCL ricostruito
@@ -22,6 +22,8 @@ posizione con provenienza esplicita; vedere [cache e prestazioni](PERFORMANCE-CA
 La UI mostra al massimo 200 risultati con conteggio completo e rimando al JSON.
 
 La V0.7 aggiunge [traccia SCL, selezione mirata e confronto reti](CONDITIONS-FOCUS-DIFF.md).
+La V0.8 interpreta un sottoinsieme booleano LAD/FBD e genera l'indice
+[dei siti di scrittura](GRAPH-WRITERS.md), senza stabilire conflitti o priorità.
 È estrazione di evidenze, non un compilatore Siemens: accessi complessi, template,
 riferimenti tra unità e XML non coperti richiedono l'originale. Non vengono valutati
 stati runtime, timer o una macchina a stati completa. ChatGPT deve seguire reti e

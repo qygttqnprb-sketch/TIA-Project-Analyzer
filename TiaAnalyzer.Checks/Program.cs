@@ -148,6 +148,11 @@ internal static class Program
                 !vm.IsBusy && demo.HasSession, "VM one-click ZIP workflow completes and keeps session attached");
             vm.SearchTerm = "SafetyOK"; vm.SearchSymbolsCommand.Execute(null);
             Check(vm.SymbolMatches.Any(s => s.Block == "ConveyorControl"), "VM searches the exported snapshot without Siemens calls");
+            vm.SearchTerm = "MotorRun"; await vm.WritersCommand.ExecuteAsync();
+            Check(vm.WriterReport.Contains("più siti nello stesso blocco") && vm.WriterReport.Contains("MotorRun") && !vm.IsBusy,
+                "VM writer lookup renders guarded sites and returns to idle");
+            vm.SearchTerm = "Missing";
+            Check(!vm.WriterReport.Contains("più siti nello stesso blocco"), "changed writer query invalidates stale results");
             vm.PreviousSnapshotPath = vm.LastZipPath;
             await vm.CompareCommand.ExecuteAsync();
             Check(vm.ComparisonStatus.StartsWith("0 differenze"), "VM compares ZIP snapshots and writes local reports");

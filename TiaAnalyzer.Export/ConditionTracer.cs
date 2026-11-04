@@ -17,6 +17,7 @@ namespace TiaAnalyzer.Export
         public string Description { get; set; }
         public int Depth { get; set; }
         public bool Supported { get; set; }
+        public string Language { get; set; }
     }
     public sealed class ConditionTrace
     {
@@ -48,7 +49,9 @@ namespace TiaAnalyzer.Export
                 if (!seen.Add(identity)) { if (!assignment.IsInvocation) result.Warnings.Add("Dipendenza ciclica o condivisa: " + owner.Name + "/" + assignment.Target + ". Non viene simulato il valore tra scansioni."); return; }
                 result.Steps.Add(new TraceStep { ArtifactId = owner.ArtifactId, Block = owner.Name, File = owner.File, Plc = owner.Plc,
                     Network = assignment.Network, Symbol = assignment.Target, Depth = depth, Supported = assignment.Supported,
-                    Description = (assignment.IsInvocation ? "Chiamata " + assignment.Target : assignment.Target + " := " + assignment.Value.Text) + " QUANDO " + assignment.Guard.Text + " · riga " + assignment.Line });
+                    Language = assignment.Language ?? "SCL",
+                    Description = (assignment.IsInvocation ? "Chiamata " + assignment.Target : (assignment.Operation ?? "Assign") + " " + assignment.Target + " := " + assignment.Value.Text) +
+                        " QUANDO " + assignment.Guard.Text + " · " + (assignment.Location ?? "riga SCL ricostruita " + assignment.Line) });
                 foreach (var caller in callsByTarget[owner.ArtifactId])
                     follow(new AssignmentEvidence { ArtifactId = caller.ArtifactId, Network = caller.Network, Position = caller.Position, Line = caller.Line,
                         Target = caller.Instance, Value = SclLogicAnalyzer.True(), Guard = caller.Guard ?? SclLogicAnalyzer.True(), IsInvocation = true,
@@ -67,7 +70,7 @@ namespace TiaAnalyzer.Export
                                 var caller = blocks[call.ArtifactId];
                                 if (result.Steps.Count >= 1000) throw new BudgetExceeded();
                                 result.Steps.Add(new TraceStep { ArtifactId = caller.ArtifactId, Block = caller.Name, File = caller.File, Plc = caller.Plc,
-                                    Network = call.Network, Symbol = reference.Text, Depth = depth + 1, Supported = parameter.Actual.Kind != "Unknown",
+                                    Network = call.Network, Symbol = reference.Text, Depth = depth + 1, Supported = parameter.Actual.Kind != "Unknown", Language = "SCL",
                                     Description = "Parametro " + reference.Text + " associato a " + parameter.Actual.Text + " tramite " + call.Instance + "; chiamata QUANDO " + call.Guard?.Text });
                                 foreach (var actual in SclLogicAnalyzer.References(parameter.Actual).Concat(SclLogicAnalyzer.References(call.Guard)))
                                     foreach (var writer in writersBySymbol[actual.Symbol].Where(a =>
@@ -85,7 +88,10 @@ namespace TiaAnalyzer.Export
             };
             try { foreach (var seed in seeds) follow(seed, 0); }
             catch (BudgetExceeded) { result.Warnings.Add("Traccia parziale: limite di 1000 evidenze raggiunto."); }
-            if (seeds.Count == 0) result.Warnings.Add("Nessuna assegnazione del simbolo modellata nel sottoinsieme SCL supportato. Non significa che il simbolo non venga scritto.");
+            if (seeds.Count == 0) result.Warnings.Add("Nessuna assegnazione del simbolo individuata nel sottoinsieme SCL/LAD/FBD supportato. Non significa che il simbolo non venga scritto.");
+            if (seeds.Count > 1) result.Warnings.Add(seeds.Count + " siti del simbolo nelle evidenze: consultare writers.md. Più siti non dimostrano un conflitto.");
+            if (analysis.Assignments.Any(a => a.Operation == "Set" || a.Operation == "Reset"))
+                result.Warnings.Add("Le bobine Set/Reset scrivono solo quando abilitate; il mantenimento del valore precedente e la priorità non vengono simulati.");
             if (analysis.Coverage.Any(c => !c.Supported)) result.Warnings.Add("Sono presenti reti non modellate: possono contenere altre scritture o condizioni. Consultare XML e cross-reference.");
             result.Warnings.Add("Evidenze offline: non vengono calcolati valori, ordine globale di esecuzione, stato di timer o prevalenza dell'ultima scrittura. Più chiamanti/istanze sono alternative da verificare.");
             result.Warnings = result.Warnings.Distinct().ToList(); return result;
@@ -96,7 +102,7 @@ namespace TiaAnalyzer.Export
             foreach (var warning in trace.Warnings) result.Append("- ").AppendLine(PackageWriter.Text(warning));
             foreach (var step in trace.Steps)
                 result.Append("\n- ").Append(PackageWriter.Text(step.Plc + " / " + step.Block + " / rete " + step.Network)).Append(" · ")
-                    .Append(step.Supported ? "SCL modellato" : "PARZIALE").Append(" · ").AppendLine(PackageWriter.Text(step.Description))
+                    .Append(step.Supported ? PackageWriter.Text(step.Language ?? "Dichiarazione") + " modellato" : "PARZIALE").Append(" · ").AppendLine(PackageWriter.Text(step.Description))
                     .Append("  Fonte: ").AppendLine(PackageWriter.Text(step.File));
             return result.ToString();
         }

@@ -18,11 +18,13 @@ DriveReady e JamDetected; Auto viene associato ad AutoMode da Main.
 Sono evidenze sintetiche, non una diagnosi di un motore reale.
 
 FOR/WHILE/REPEAT/CASE, salti/uscite anticipate, espressioni non interpretate,
-reti grafiche, sovrapposizioni di indirizzi e alias IN_OUT/uscita non vengono
+reti grafiche fuori dal sottoinsieme V0.8, sovrapposizioni di indirizzi e alias IN_OUT/uscita non vengono
 simulati. La copertura è dichiarata parziale. Cicli nelle dipendenze si fermano
 con avviso; limite 16 livelli/1000 evidenze. Non vengono valutati valori runtime,
 ordine globale degli OB/chiamate, timer o prevalenza dell'ultima scrittura.
 Più chiamanti e istanze restano possibilità distinte da verificare.
+La V0.8 aggiunge [consensi LAD/FBD e siti di scrittura](GRAPH-WRITERS.md):
+le reti grafiche supportate entrano nella stessa traccia con ID rete/UId.
 
 ## ZIP mirato
 

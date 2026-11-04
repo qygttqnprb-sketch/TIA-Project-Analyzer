@@ -14,6 +14,7 @@ namespace TiaAnalyzer.Export
         public string File { get; set; }
         public string Network { get; set; }
         public string Location { get; set; }
+        public int Position { get; set; }
         public string Language { get; set; }
         public string Operation { get; set; }
         public string Value { get; set; }
@@ -61,7 +62,8 @@ namespace TiaAnalyzer.Export
                     groups.Add(scope, group);
                 }
                 group.Sites.Add(new WriteSite { ArtifactId = block.ArtifactId, Block = block.Name, File = block.File, Network = assignment.Network,
-                    Location = assignment.Location ?? "riga SCL ricostruita " + assignment.Line, Language = assignment.Language ?? "SCL",
+                    Location = assignment.Location ?? "riga SCL ricostruita " + assignment.Line + " / offset " + assignment.Position,
+                    Position = assignment.Position, Language = assignment.Language ?? "SCL",
                     Operation = assignment.Operation ?? "Assign", Value = assignment.Value?.Text, Guard = assignment.Guard?.Text, Supported = assignment.Supported });
             }
             foreach (var group in groups.Values)
@@ -85,6 +87,7 @@ namespace TiaAnalyzer.Export
             if (analysis.Coverage.Any(c => !c.Supported))
                 result.Warnings.Add("Copertura parziale: reti non modellate possono contenere ulteriori scritture. L'elenco non dimostra l'assenza di altri siti.");
             result.Warnings.Add("Più siti non dimostrano un conflitto: rami esclusivi, chiamate e istanze possono avere effetti diversi. Non viene stabilita l'ultima scrittura.");
+            result.Warnings.Add("I conteggi riguardano solo i blocchi presenti nell'analisi; il manifest dichiara gli oggetti mancanti o esclusi dal pacchetto.");
             result.Warnings.Add("Le variabili locali sono separate per blocco, i simboli globali per progetto/PLC/unità. Alias, sovrapposizioni di indirizzo e associazioni IN_OUT/uscita non sono risolti.");
             result.Warnings.Add("I riferimenti di scrittura nativi sono separati dai siti XML: non si sommano ai conteggi e non vengono associati automaticamente a reti o istanze.");
             return result;
@@ -101,15 +104,15 @@ namespace TiaAnalyzer.Export
         }
         public static string Markdown(WriteReport report, int maximumSites = int.MaxValue)
         {
-            var result = new StringBuilder("# Siti di scrittura PLC\n\n");
-            foreach (var warning in report.Warnings) result.Append("- ").AppendLine(PackageWriter.Text(warning));
+            var result = new StringBuilder("# Siti di scrittura PLC\n\nPiù siti non dimostrano un conflitto né stabiliscono l'ultima scrittura.\n");
             int shown = 0;
             foreach (var group in report.Groups)
             {
                 if (shown >= maximumSites) break;
-                result.Append("\n## ").AppendLine(PackageWriter.Text(group.Project + " / " + group.Plc + " / " + group.Unit + " / " + group.Target));
-                result.Append(group.Sites.Count).Append(" siti in ").Append(group.DistinctBlocks).Append(" blocchi · ")
-                    .AppendLine(PackageWriter.Text(group.Classification));
+                result.Append("\n## ").AppendLine(PackageWriter.Text(string.Join(" / ", new[] { group.Project, group.Plc, group.Unit, group.Target }.Where(s => !string.IsNullOrEmpty(s)))));
+                result.Append(group.Sites.Count).Append(" siti in ").Append(group.DistinctBlocks).Append(group.DistinctBlocks == 1 ? " blocco · " : " blocchi · ")
+                    .AppendLine(group.Classification == "MultipleBlocks" ? "scritture in blocchi diversi" :
+                        group.Classification == "MultipleSites" ? "più siti nello stesso blocco" : "un sito individuato");
                 foreach (var site in group.Sites)
                 {
                     if (shown++ >= maximumSites) break;
@@ -126,6 +129,8 @@ namespace TiaAnalyzer.Export
                     reference.ReferencePath + " / " + reference.Location + " / " + reference.Access));
             if (report.NativeWrites.Count > maximumSites) result.AppendLine("\nAltri riferimenti in writers.json e crossreferences.json.");
             if (report.Groups.Count == 0 && report.NativeWrites.Count == 0) result.AppendLine("\nNessun sito individuato nella copertura disponibile.");
+            result.AppendLine("\n## Copertura e limiti\n");
+            foreach (var warning in report.Warnings) result.Append("- ").AppendLine(PackageWriter.Text(warning));
             return result.ToString();
         }
     }
