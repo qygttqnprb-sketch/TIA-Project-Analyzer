@@ -35,7 +35,8 @@ namespace TiaAnalyzer.Openness
                     return new ExportStamp { Fingerprints = fingerprints,
                         Token = ExportPaths.Identity(fingerprints.SelectMany(f => new[] { f.Kind, f.Value }).ToArray()) };
                 }
-                catch (EngineeringSecurityException ex) { throw Denied(ex); }
+                catch (EngineeringSecurityException ex)
+                { writer.Note(name + ": fingerprint non autorizzato; si tenta solo l'export XML consentito. " + ex.Message); return null; }
                 catch (Exception ex) when (ex is EngineeringException || ex is NotSupportedException)
                 { writer.Note(name + ": fingerprint non utilizzabile; export completo senza compilare. " + ex.Message); return null; }
             }
@@ -50,14 +51,15 @@ namespace TiaAnalyzer.Openness
                     artifact.CrossReferencesStatus = "Available";
                     foreach (SourceObject item in result.Sources) ReadReferenceSource(item, artifact, writer, 0);
                 }
-                catch (EngineeringSecurityException ex) { throw Denied(ex); }
+                catch (EngineeringSecurityException ex)
+                { artifact.CrossReferencesStatus = "Failed"; writer.Note(artifact.Name + ": cross-reference non autorizzati, nessuna autorizzazione modificata. " + ex.Message); }
                 catch (Exception ex) when (ex is EngineeringException || ex is NotSupportedException)
                 { artifact.CrossReferencesStatus = "Failed"; writer.Note(artifact.Name + ": cross-reference incompleti; gli XML restano disponibili. " + ex.Message); }
             }
             private static void ReadReferenceSource(SourceObject source, ExportArtifact artifact, PlcExportWriter writer, int depth)
             {
                 writer.CheckCancellation();
-                if (depth > 64 || writer.Snapshot.CrossReferences.Count >= 200000)
+                if (depth > 64 || ++writer.CrossReferenceVisits > 200000 || writer.Snapshot.CrossReferences.Count >= 200000)
                 { artifact.CrossReferencesStatus = "Partial"; writer.Note("Cross-reference parziali: raggiunto il limite di profondità o di 200000 posizioni."); return; }
                 foreach (ReferenceObject reference in source.References)
                     foreach (Location location in reference.Locations)

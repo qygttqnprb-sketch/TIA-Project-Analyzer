@@ -1,5 +1,23 @@
 # Esiti verificati · 4 novembre 2026
 
+## Aggiornamento V0.7
+
+- 141 controlli automatici .NET 10 superati con dati sintetici/simulati.
+- 15 verifiche WPF/net48 superate, zero errori di binding: cache fredda/calda,
+  traccia dei consensi, ZIP mirato e invalidazione dei risultati precedenti.
+- Build Debug e Release x64 contro Base/Step7 V21 e build fallback senza Siemens:
+  riuscite senza errori/avvisi. Nessuna DLL Siemens redistribuita.
+- Nella demo, il riuso ripristina cinque XML e sei analisi; la tabella tag è sempre
+  riesportata. Il pacchetto MotorRun include quattro oggetti su sei, con inventario
+  ed esclusioni dichiarati. Non sono misure di accelerazione su un progetto reale.
+- Verificati cache corrotte, impronte instabili, IF/ELSIF/ELSE e guardie del chiamante,
+  conservazione delle stringhe, reti non modellate, rinumerazione UID LAD, contatti
+  negati, XML alterati, cancellazione del confronto e pacchetti con selezione diversa.
+- I servizi Siemens CrossReference/Fingerprint sono compilati contro le API installate;
+  raccolta dei loro risultati e riuso su progetti PLC reali restano da validare.
+
+## Baseline V0.5
+
 Windows x64, .NET SDK 10.0.403. DLL installate Base e Step7: identità assembly
 `21.0.0.0`, nel percorso standard PublicAPI V21/net48.
 

@@ -46,20 +46,24 @@ namespace TiaAnalyzer.Export
                             if (warning != null) { snapshot.Metrics.CacheWarnings++; snapshot.Notes.Add(warning); }
                             var single = new ExportSnapshot { Artifacts = new List<ExportArtifact> { artifact }, IsDemo = snapshot.IsDemo };
                             fragment = new AnalysisFragment { Version = AnalysisCache.ParserVersion,
-                                Analysis = AnalyzeUncached(directory, single, cancellation, options.IncludeNetworkXml), ContentHash = artifact.ContentSha256 };
+                                Analysis = AnalyzeUncached(directory, single, cancellation, options.IncludeNetworkXml), ContentHash = artifact.ContentSha256,
+                                ContentHashAlgorithm = artifact.ContentHashAlgorithm };
                             if (cache != null && fragment.Analysis.Blocks.Count == 1 && !fragment.Analysis.Warnings.Any(w => w.Contains("analisi incompleta")))
                                 try { cache.Save(directory, artifact, hash, options.IncludeNetworkXml, fragment, cancellation); }
                                 catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
                                 { snapshot.Metrics.CacheWarnings++; snapshot.Notes.Add("Cache analisi non aggiornata: " + ex.Message); }
                         }
                         artifact.ContentSha256 = fragment.ContentHash;
+                        artifact.ContentHashAlgorithm = fragment.ContentHashAlgorithm;
                         result.Blocks.AddRange(fragment.Analysis.Blocks); result.Symbols.AddRange(fragment.Analysis.Symbols);
                         result.Dependencies.AddRange(fragment.Analysis.Dependencies); result.Warnings.AddRange(fragment.Analysis.Warnings);
+                        result.Assignments.AddRange(fragment.Analysis.Assignments); result.Calls.AddRange(fragment.Analysis.Calls); result.Coverage.AddRange(fragment.Analysis.Coverage);
                     }
                     ResolveDependencies(result);
                     result.Warnings = result.Warnings.Distinct(StringComparer.Ordinal).ToList();
                 }
                 result.CrossReferences.AddRange(snapshot.CrossReferences ?? new List<PlcCrossReference>());
+                SclLogicAnalyzer.ResolveCalls(result);
                 foreach (var reference in result.CrossReferences)
                     result.Symbols.Add(new SymbolEvidence { ArtifactId = reference.QueriedArtifactId, Name = reference.SourceName,
                         Block = reference.ReferenceName, Plc = reference.Plc, Project = reference.Project, File = "crossreferences.json", Network = "",
@@ -81,7 +85,7 @@ namespace TiaAnalyzer.Export
                 try
                 {
                     var document = Load(ExportPaths.Resolve(directory, artifact.RelativePath));
-                    artifact.ContentSha256 = ContentHash(document);
+                    artifact.ContentSha256 = XmlEvidence.Hash(document, true); artifact.ContentHashAlgorithm = "xml-tree-v2";
                     var block = new BlockAnalysis { ArtifactId = artifact.Id, Name = artifact.Name, File = artifact.RelativePath,
                         Project = artifact.Project, Plc = artifact.Plc, Unit = Unit(artifact.Group), Kind = artifact.Kind };
                     analysis.Blocks.Add(block);
@@ -144,6 +148,7 @@ namespace TiaAnalyzer.Export
                     analysis.Warnings.Add(artifact.RelativePath + ": analisi incompleta: " + ex.Message);
                 }
             }
+            SclLogicAnalyzer.Parse(analysis, cancellation);
             ResolveDependencies(analysis);
             analysis.Warnings.Add("Riferimenti XML e candidati SCL sono evidenze statiche; i cross-reference Siemens, quando disponibili, sono conservati separatamente.");
             analysis.Warnings.Add("Il testo SCL è una ricostruzione dei token: per sintassi non riconosciuta, accessi indicizzati e multi-istanze fare riferimento al NetworkSource XML originale.");
@@ -175,15 +180,6 @@ namespace TiaAnalyzer.Export
             using (var reader = XmlReader.Create(path, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit,
                 XmlResolver = null, MaxCharactersInDocument = MaxXmlCharacters }))
                 return XDocument.Load(reader, LoadOptions.PreserveWhitespace);
-        }
-        private static string ContentHash(XDocument document)
-        {
-            var normalized = new XDocument(document);
-            if (normalized.Root != null)
-                normalized.Root.Elements().Where(e => e.Name.LocalName == "DocumentInfo").Remove();
-            // Preserve whitespace in leaf source tokens; discard only XML indentation.
-            foreach (var text in normalized.DescendantNodes().OfType<XText>().Where(t => string.IsNullOrWhiteSpace(t.Value) && (t.Parent == null || t.Parent.HasElements)).ToList()) text.Remove();
-            return ExportPaths.Hash(normalized.ToString(SaveOptions.DisableFormatting));
         }
         private static string Unit(string group)
         {
@@ -227,7 +223,7 @@ namespace TiaAnalyzer.Export
             if (symbol == null) return (string)access.Elements().FirstOrDefault(e => e.Name.LocalName == "Constant")?.Attribute("Name") ?? "";
             return string.Join(".", symbol.Elements().Where(e => e.Name.LocalName == "Component").Select(e => (string)e.Attribute("Name")));
         }
-        private static string Render(XElement element)
+        internal static string Render(XElement element)
         {
             var text = new StringBuilder(); RenderNode(element, text); return text.ToString();
         }
@@ -309,7 +305,7 @@ namespace TiaAnalyzer.Export
         {
             int value; return int.TryParse((string)element.Attribute("Num"), out value) ? Math.Max(0, Math.Min(max, value)) : 1;
         }
-        internal static string MaskCommentsAndStrings(string source)
+        internal static string MaskCommentsAndStrings(string source, bool maskStrings = true)
         {
             var result = source.ToCharArray(); int index = 0;
             while (index < source.Length)
@@ -337,6 +333,7 @@ namespace TiaAnalyzer.Export
                         if (index < source.Length && source[index] == '\'') { index++; continue; }
                         break;
                     }
+                    if (!maskStrings) continue;
                 }
                 else if (index + 1 < source.Length && source[index] == '/' && source[index + 1] == '/')
                 { while (index < source.Length && source[index] != '\n') index++; }

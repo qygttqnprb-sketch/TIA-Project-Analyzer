@@ -21,6 +21,7 @@ Quando disponibili, i cross-reference ufficiali Siemens aggiungono accesso e
 posizione con provenienza esplicita; vedere [cache e prestazioni](PERFORMANCE-CACHE.md).
 La UI mostra al massimo 200 risultati con conteggio completo e rimando al JSON.
 
+La V0.7 aggiunge [traccia SCL, selezione mirata e confronto reti](CONDITIONS-FOCUS-DIFF.md).
 È estrazione di evidenze, non un compilatore Siemens: accessi complessi, template,
 riferimenti tra unità e XML non coperti richiedono l'originale. Non vengono valutati
 stati runtime, timer o una macchina a stati completa. ChatGPT deve seguire reti e
@@ -39,8 +40,8 @@ contiene `comparison.json` e `comparison.md`.
   solo DocumentInfo e indentazione XML. Non è equivalenza semantica PLC.
 - AvailabilityChanged/Unavailable: copertura cambiata o oggetti non esportati.
 
-Il confronto usa gli hash dichiarati; non ricontrolla ogni XML né estrae file dallo
-ZIP. Valida percorsi/identità e limita il manifest decompresso a 64 MiB.
+Il confronto ricontrolla hash/dimensioni di ogni XML dichiarato utilizzabile senza
+estrarre file dallo ZIP. Valida percorsi/identità e limita il manifest decompresso a 64 MiB.
 Rifiuta confronti DEMO/reale. Scope differenti e snapshot parziali producono avvisi.
 Rinomine/spostamenti possono risultare come rimozione più aggiunta.
 

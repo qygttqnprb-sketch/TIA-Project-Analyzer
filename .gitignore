@@ -10,3 +10,4 @@ Siemens*.dll
 /Directory.Build.props
 /artifacts/
 *.partial
+.tia-cache/

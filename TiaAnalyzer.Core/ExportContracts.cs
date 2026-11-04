@@ -22,6 +22,7 @@ namespace TiaAnalyzer.Core
         public string Status { get; set; }
         public string Sha256 { get; set; }
         public string ContentSha256 { get; set; }
+        public string ContentHashAlgorithm { get; set; }
         public long Bytes { get; set; }
         public bool Protected { get; set; }
         public bool ReusedXml { get; set; }
@@ -56,6 +57,8 @@ namespace TiaAnalyzer.Core
         public List<PlcCrossReference> CrossReferences { get; set; } = new List<PlcCrossReference>();
         [DataMember]
         public List<string> Notes { get; set; } = new List<string>();
+        [DataMember]
+        public PackageSelection Selection { get; set; }
         // Recorded separately in metrics.json, after the archive payload is written.
         public ExportMetrics Metrics { get; set; } = new ExportMetrics();
     }
@@ -63,6 +66,14 @@ namespace TiaAnalyzer.Core
     {
         public List<EnvironmentCheck> Environment { get; set; } = new List<EnvironmentCheck>();
         public List<string> Log { get; set; } = new List<string>();
+    }
+    public sealed class PackageSelection
+    {
+        public string Query { get; set; }
+        public string Mode { get; set; }
+        public int TotalArtifacts { get; set; }
+        public int IncludedArtifacts { get; set; }
+        public List<string> ExcludedIds { get; set; } = new List<string>();
     }
     public sealed class ExportProgress
     {

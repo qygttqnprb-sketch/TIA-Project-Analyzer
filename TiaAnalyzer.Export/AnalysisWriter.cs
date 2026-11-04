@@ -12,9 +12,23 @@ namespace TiaAnalyzer.Export
     {
         public static IReadOnlyList<string> Write(string directory, ProjectAnalysis analysis, CancellationToken cancellation)
         {
-            var files = new List<string> { "analysis.json", "symbols.json", "dependencies.dot", "logic.md" };
+            var files = new List<string> { "analysis.json", "symbols.json", "dependencies.dot", "logic.md", "conditions.json", "conditions.md" };
             JsonFiles.Write(ExportPaths.Resolve(directory, "analysis.json"), analysis);
             JsonFiles.Write(ExportPaths.Resolve(directory, "symbols.json"), analysis.Symbols);
+            JsonFiles.Write(ExportPaths.Resolve(directory, "conditions.json"), analysis.Assignments);
+            var conditions = new StringBuilder("# Assegnazioni e condizioni SCL\n\nEvidenze offline del sottoinsieme supportato. Non sono valori runtime. Copertura completa in analysis.json.\n\n");
+            var byId = analysis.Blocks.ToDictionary(b => b.ArtifactId);
+            foreach (var assignment in analysis.Assignments)
+            {
+                cancellation.ThrowIfCancellationRequested(); var block = byId[assignment.ArtifactId];
+                conditions.Append("## ").AppendLine(PackageWriter.Text(block.Plc + " / " + block.Name + " / rete " + assignment.Network + " / riga " + assignment.Line));
+                conditions.AppendLine(assignment.Supported ? "\nSCL modellato.\n" : "\n**PARZIALE: leggere la rete completa.**\n");
+                conditions.AppendLine(Code(assignment.Target + " := " + assignment.Value.Text + ";\n// QUANDO " + assignment.Guard.Text, "scl"));
+                conditions.Append("Fonte XML: ").AppendLine(PackageWriter.Text(block.File));
+            }
+            foreach (var coverage in analysis.Coverage.Where(c => !c.Supported))
+                conditions.Append("\n- NON MODELLATO: ").Append(PackageWriter.Text(byId[coverage.ArtifactId].Name + " / " + coverage.Network)).Append(": ").AppendLine(PackageWriter.Text(coverage.Reason));
+            PackageWriter.WriteText(directory, "conditions.md", conditions.ToString());
             var graph = new StringBuilder("digraph PLC {\n  rankdir=LR;\n");
             var report = new StringBuilder("# Evidenze della logica PLC\n\n");
             foreach (var warning in analysis.Warnings) report.Append("- ").AppendLine(PackageWriter.Text(warning));
@@ -58,7 +72,7 @@ namespace TiaAnalyzer.Export
             return files.AsReadOnly();
         }
         private static string Dot(string value) { return (value ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", " ").Replace("\n", "\\n"); }
-        private static string Code(string content, string language)
+        internal static string Code(string content, string language)
         {
             content = content ?? ""; int longest = 0, count = 0;
             foreach (var ch in content) { count = ch == '`' ? count + 1 : 0; longest = Math.Max(longest, count); }

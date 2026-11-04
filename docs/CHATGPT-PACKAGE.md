@@ -16,6 +16,9 @@ Il pacchetto comprende:
 - `diagnostics.json`: controlli dell'ambiente e log della sessione.
 - `analysis.json`, `symbols.json`, `dependencies.dot`, `logic.md` e `blocks/`:
   evidenze delle reti, ricerca variabili e grafo; vedere [analisi statica](STATIC-ANALYSIS.md).
+- `conditions.json/md`, `crossreferences.json`, `metrics.json`: condizioni SCL,
+  riferimenti ufficiali quando disponibili e misure della pipeline.
+- Nei pacchetti mirati: inventario completo, selezione dichiarata e traccia del simbolo.
 - `plc/`: blocchi, UDT e tabelle variabili XML, senza riscrittura dei contenuti.
 
 Allegare manualmente lo ZIP a ChatGPT e ripetere o precisare la domanda. Chiedere

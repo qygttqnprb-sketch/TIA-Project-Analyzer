@@ -69,6 +69,12 @@ internal static class Program
         Require(vm.SymbolMatches.Count == 3, "symbol query binds declaration, XML and demo cross-reference");
         vm.PreviousSnapshotPath = firstZip; await vm.CompareCommand.ExecuteAsync(); await Dispatcher.Yield();
         Require(vm.ComparisonStatus.StartsWith("0 differenze"), "comparison command completes on WPF dispatcher");
+        await vm.TraceCommand.ExecuteAsync(); await Dispatcher.Yield();
+        Require(vm.TraceReport.Contains("JamDetected") && vm.TraceReport.Contains("AutoMode"), "condition trace follows interlocks and caller input");
+        vm.FocusedPackage = true; await vm.ExportZipCommand.ExecuteAsync(); await Dispatcher.Yield();
+        Require(vm.ExportStatus.Contains("ZIP mirato: 4 di 6"), "focused ZIP coverage is shown in the UI");
+        Require(vm.ComparisonStatus.Contains("eseguire il confronto") && !vm.TraceReport.Contains("JamDetected"), "new export invalidates stale comparison and trace");
+        await vm.TraceCommand.ExecuteAsync(); await Dispatcher.Yield();
         var scroll = (ScrollViewer)window.FindName("MainScroll");
         scroll.ScrollToTop(); await Dispatcher.Yield(); Capture(window, Path.Combine(output, "overview.png"));
         var exportCard = (FrameworkElement)window.FindName("ExportCard");

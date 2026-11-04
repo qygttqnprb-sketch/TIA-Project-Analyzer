@@ -14,6 +14,8 @@ Siemens.Engineering.* corrispondenti, versione 21, dall'installazione.
 - `PlcSoftware.BlockGroup`, `TypeGroup`, `TagTableGroup`, gruppi utente/di sistema.
 - `PlcUnitProvider.UnitGroup.Units` e `SafetyUnits` con blocchi/tipi/tag.
 - `PlcBlock.Export`, `PlcType.Export`, `PlcTagTable.Export`: `ExportOptions.WithDefaults`.
+- `FingerprintProvider.GetFingerprints` e `CrossReferenceService.GetCrossReferences`:
+  servizi di lettura opzionali, con esito esplicito e fallback all'XML quando non disponibili.
 - `Dispose` del solo handle Attach, senza chiudere progetti o processi TIA.
 
 `SiemensBackend.V21.cs` gestisce connessione/inventario; `SiemensExport.V21.cs` l'export.

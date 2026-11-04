@@ -4,6 +4,8 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Xml;
 using TiaAnalyzer.Core;
 
 namespace TiaAnalyzer.Export
@@ -16,6 +18,9 @@ namespace TiaAnalyzer.Export
         public string Change { get; set; }
         public string BeforeFile { get; set; }
         public string AfterFile { get; set; }
+        public List<string> NativeChanges { get; set; } = new List<string>();
+        public List<NetworkDifference> Networks { get; set; } = new List<NetworkDifference>();
+        public string NetworkWarning { get; set; }
     }
     public sealed class SnapshotComparison
     {
@@ -28,7 +33,7 @@ namespace TiaAnalyzer.Export
     public static class SnapshotComparer
     {
         private const long MaxManifestBytes = 64L * 1024 * 1024;
-        public static SnapshotComparison Compare(string before, string after)
+        public static SnapshotComparison Compare(string before, string after, CancellationToken cancellation = default(CancellationToken))
         {
             var previous = ReadManifest(before); var current = ReadManifest(after);
             if (previous.IsDemo != current.IsDemo) throw new InvalidDataException("Non confrontare dati DEMO con un progetto reale.");
@@ -40,24 +45,48 @@ namespace TiaAnalyzer.Export
                 result.Warnings.Add("Nessuno scope progetto/PLC in comune: potrebbero essere progetti diversi oppure nomi modificati.");
             if (previous.Issues.Count > 0 || current.Issues.Count > 0 || previous.Artifacts.Any(a => a.Status != "Exported") || current.Artifacts.Any(a => a.Status != "Exported"))
                 result.Warnings.Add("Almeno uno snapshot contiene errori o oggetti protetti. Aggiunte e rimozioni non dimostrano una modifica del programma senza verificare la copertura.");
-            result.Warnings.Add("Il confronto usa identità e hash dichiarati nei manifest; non verifica gli XML allegati, non è un confronto semantico PLC e non prova equivalenza funzionale.");
+            if (previous.Selection != null || current.Selection != null)
+                result.Warnings.Add("Sono presenti pacchetti mirati: gli oggetti esclusi dalla selezione non sono considerati cancellati dal progetto.");
+            result.Warnings.Add("Integrità SHA256 verificata per tutti gli XML dichiarati utilizzabili. Le reti sono confrontate per posizione; rappresentazione/commenti e logica sono distinti senza provare equivalenza funzionale PLC.");
+            using (var oldContent = new SnapshotContent(before))
+            using (var newContent = new SnapshotContent(after))
+            {
+            oldContent.VerifyAll(previous, cancellation); newContent.VerifyAll(current, cancellation);
             foreach (var id in oldFiles.Keys.Union(newFiles.Keys).OrderBy(k => k, StringComparer.Ordinal))
             {
+                cancellation.ThrowIfCancellationRequested();
                 ExportArtifact oldFile, newFile;
                 oldFiles.TryGetValue(id, out oldFile); newFiles.TryGetValue(id, out newFile);
-                string change;
-                if (oldFile == null) change = "Added";
-                else if (newFile == null) change = "Removed";
+                var nativeChanges = NativeChanges(oldFile, newFile); string change;
+                if (oldFile == null) change = previous.Selection?.ExcludedIds?.Contains(id) == true ? "NotIncludedBefore" : "Added";
+                else if (newFile == null) change = current.Selection?.ExcludedIds?.Contains(id) == true ? "NotIncludedAfter" : "Removed";
                 else if (oldFile.Status != newFile.Status) change = "AvailabilityChanged";
                 else if (oldFile.Status == "Failed") change = "Unavailable";
-                else if (oldFile.Sha256 == newFile.Sha256) { result.Unchanged++; continue; }
-                else if (oldFile.ContentSha256 != null && oldFile.ContentSha256 == newFile.ContentSha256) change = "ExportMetadataOnly";
+                else if (oldFile.Sha256 == newFile.Sha256 && nativeChanges.Count == 0) { result.Unchanged++; continue; }
+                else if (oldFile.Sha256 == newFile.Sha256) change = "NativeFingerprintChanged";
+                else if (nativeChanges.Count == 0 && oldFile.ContentHashAlgorithm == newFile.ContentHashAlgorithm &&
+                    oldFile.ContentSha256 != null && oldFile.ContentSha256 == newFile.ContentSha256) change = "ExportMetadataOnly";
                 else change = "Changed";
                 var artifact = newFile ?? oldFile;
-                result.Changes.Add(new SnapshotChange { Id = id, Name = artifact.Name, Plc = artifact.Plc, Change = change,
-                    BeforeFile = oldFile?.RelativePath, AfterFile = newFile?.RelativePath });
+                var detail = new SnapshotChange { Id = id, Name = artifact.Name, Plc = artifact.Plc, Change = change,
+                    BeforeFile = oldFile?.RelativePath, AfterFile = newFile?.RelativePath, NativeChanges = nativeChanges };
+                if (oldFile?.Status != "Failed" && newFile?.Status != "Failed")
+                    try
+                    {
+                        var oldXml = oldFile?.RelativePath == null ? null : oldContent.LoadXml(oldFile, cancellation);
+                        var newXml = newFile?.RelativePath == null ? null : newContent.LoadXml(newFile, cancellation);
+                        detail.Networks = NetworkComparison.Compare(oldXml, newXml, cancellation);
+                    }
+                    catch (XmlException ex) { detail.NetworkWarning = "Confronto reti non disponibile: " + ex.Message; }
+                result.Changes.Add(detail);
+            }
             }
             return result;
+        }
+        private static List<string> NativeChanges(ExportArtifact before, ExportArtifact after)
+        {
+            var old = (before?.Fingerprints ?? new List<ObjectFingerprint>()).GroupBy(f => f.Kind).ToDictionary(g => g.Key, g => g.First().Value);
+            return (after?.Fingerprints ?? new List<ObjectFingerprint>()).Where(f => old.ContainsKey(f.Kind) && old[f.Kind] != f.Value).Select(f => f.Kind).Distinct().ToList();
         }
         public static ExportSnapshot ReadManifest(string path)
         {
@@ -113,6 +142,8 @@ namespace TiaAnalyzer.Export
                 if (artifact.Status != "Failed" && (!IsHash(artifact.Sha256) || string.IsNullOrWhiteSpace(artifact.RelativePath)))
                     throw new InvalidDataException("Oggetto esportato senza file o hash.");
                 if (artifact.ContentSha256 != null && !IsHash(artifact.ContentSha256)) throw new InvalidDataException("Hash contenuto non valido.");
+                if (artifact.Fingerprints != null && (artifact.Fingerprints.Count > 100 || artifact.Fingerprints.Any(f => f == null || string.IsNullOrEmpty(f.Kind) || string.IsNullOrEmpty(f.Value)) ||
+                    artifact.Fingerprints.Select(f => f.Kind).Distinct().Count() != artifact.Fingerprints.Count)) throw new InvalidDataException("Fingerprint non validi.");
                 if (artifact.RelativePath != null) ExportPaths.Resolve(Path.GetTempPath(), artifact.RelativePath);
             }
         }
@@ -125,8 +156,19 @@ namespace TiaAnalyzer.Export
             foreach (var warning in comparison.Warnings) text.Append("- ").AppendLine(PackageWriter.Text(warning));
             text.AppendLine("\n## Differenze\n");
             foreach (var change in comparison.Changes)
+            {
                 text.Append("- ").Append(PackageWriter.Text(change.Change)).Append(" · ").Append(PackageWriter.Text(change.Plc))
                     .Append(" / ").Append(PackageWriter.Text(change.Name)).Append(" · ").AppendLine(PackageWriter.Text(change.Id));
+                if (change.NativeChanges.Count > 0) text.Append("  Fingerprint nativi cambiati: ").AppendLine(PackageWriter.Text(string.Join(", ", change.NativeChanges)));
+                if (change.NetworkWarning != null) text.AppendLine(PackageWriter.Text(change.NetworkWarning));
+                foreach (var network in change.Networks)
+                {
+                    text.Append("\n### ").Append(PackageWriter.Text(change.Name)).Append(" · posizione ").Append(network.Position).Append(" · ").AppendLine(PackageWriter.Text(network.Change));
+                    text.Append("\nPrima, rete ").AppendLine(PackageWriter.Text(network.BeforeId)).AppendLine(AnalysisWriter.Code(network.Before, "text"));
+                    text.Append("Dopo, rete ").AppendLine(PackageWriter.Text(network.AfterId)).AppendLine(AnalysisWriter.Code(network.After, "text"));
+                    if (network.PreviewTruncated) text.AppendLine("Anteprima limitata a 8000 caratteri per lato; consultare gli XML originali per il contenuto completo.");
+                }
+            }
             return text.ToString();
         }
     }

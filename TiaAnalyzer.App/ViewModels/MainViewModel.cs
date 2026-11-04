@@ -32,6 +32,8 @@ namespace TiaAnalyzer.App.ViewModels
         private IReadOnlyList<SymbolEvidence> symbolMatches = new List<SymbolEvidence>();
         private bool useAnalysisCache = true, reuseXml, compactReports = true;
         private string performanceSummary = "I tempi saranno misurati alla prossima esportazione.";
+        private bool focusedPackage;
+        private string traceQuery = "MotorRun", traceReport = "Esportare uno snapshot, poi indicare un simbolo per seguire le condizioni.";
         private ITiaConnectionService Service { get { return demo ? demoConnection : realConnection; } }
         public MainViewModel() : this(new SiemensEnvironmentProbe(), new MockEnvironmentProbe(),
             new TiaConnectionService(new SiemensBackend()), new TiaConnectionService(new DemoBackend())) { }
@@ -47,6 +49,7 @@ namespace TiaAnalyzer.App.ViewModels
             ExportZipCommand = Command(() => ExportAsync(true), () => !busy && connected);
             CompareCommand = Command(CompareAsync, () => !busy && !string.IsNullOrWhiteSpace(previousSnapshotPath) && !string.IsNullOrWhiteSpace(currentSnapshotPath));
             SearchSymbolsCommand = new RelayCommand(SearchSymbols, () => !busy && lastAnalysis != null && !string.IsNullOrWhiteSpace(searchTerm));
+            TraceCommand = Command(TraceAsync, () => !busy && lastAnalysis != null && !string.IsNullOrWhiteSpace(traceQuery));
             CancelExportCommand = new AsyncCommand(() => { exportCancellation?.Cancel(); return Task.CompletedTask; },
                 () => exportCancellation != null && !exportCancellation.IsCancellationRequested, ReportError);
         }
@@ -69,6 +72,7 @@ namespace TiaAnalyzer.App.ViewModels
         public AsyncCommand CancelExportCommand { get; }
         public AsyncCommand CompareCommand { get; }
         public RelayCommand SearchSymbolsCommand { get; }
+        public AsyncCommand TraceCommand { get; }
         public bool IsDemo
         {
             get { return demo; }
@@ -118,13 +122,16 @@ namespace TiaAnalyzer.App.ViewModels
         public string SearchTerm { get { return searchTerm; } set { searchTerm = value; Notify(); RefreshCommands(); } }
         public string SymbolSummary { get { return symbolSummary; } }
         public IReadOnlyList<SymbolEvidence> SymbolMatches { get { return symbolMatches; } }
-        public string PreviousSnapshotPath { get { return previousSnapshotPath; } set { if (busy) return; previousSnapshotPath = value; Notify(); RefreshCommands(); } }
-        public string CurrentSnapshotPath { get { return currentSnapshotPath; } set { if (busy) return; currentSnapshotPath = value; Notify(); RefreshCommands(); } }
+        public string PreviousSnapshotPath { get { return previousSnapshotPath; } set { if (busy) return; previousSnapshotPath = value; Notify(); InvalidateComparison(); RefreshCommands(); } }
+        public string CurrentSnapshotPath { get { return currentSnapshotPath; } set { if (busy) return; currentSnapshotPath = value; Notify(); InvalidateComparison(); RefreshCommands(); } }
         public string ComparisonStatus { get { return comparisonStatus; } }
         public bool UseAnalysisCache { get { return useAnalysisCache; } set { if (busy) return; useAnalysisCache = value; Notify(); } }
         public bool ReuseXml { get { return reuseXml; } set { if (busy) return; reuseXml = value; Notify(); } }
         public bool CompactReports { get { return compactReports; } set { if (busy) return; compactReports = value; Notify(); } }
         public string PerformanceSummary { get { return performanceSummary; } }
+        public bool FocusedPackage { get { return focusedPackage; } set { if (busy) return; focusedPackage = value; Notify(); } }
+        public string TraceQuery { get { return traceQuery; } set { if (busy) return; traceQuery = value; Notify(); RefreshCommands(); } }
+        public string TraceReport { get { return traceReport; } }
         public IList<EnvironmentCheck> Checks { get { return checks; } }
         public IReadOnlyList<ProjectComponent> Components { get { return components; } }
         public string ComponentSummary { get { return components.Count + (demo ? " componenti sintetici" : " elementi letti dai soli progetti già aperti"); } }
@@ -174,9 +181,11 @@ namespace TiaAnalyzer.App.ViewModels
         private Task ExportXmlAsync() { return ExportAsync(false); }
         private async Task ExportAsync(bool zip)
         {
+            if (zip && focusedPackage && string.IsNullOrWhiteSpace(traceQuery)) throw new InvalidOperationException("Indicare il simbolo o blocco del pacchetto mirato.");
             var root = Path.GetFullPath(exportRoot);
             var directory = Path.Combine(root, (demo ? "DEMO_" : "TIA_") + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0, 8));
             lastZipPath = null; lastExportDirectory = null; lastAnalysis = null; symbolMatches = new List<SymbolEvidence>();
+            traceReport = "Traccia da ricalcolare dopo la nuova raccolta."; Notify(nameof(TraceReport));
             Notify(nameof(LastZipPath)); Notify(nameof(LastExportDirectory)); Notify(nameof(SymbolMatches));
             using (var cancellation = new CancellationTokenSource())
             {
@@ -194,13 +203,18 @@ namespace TiaAnalyzer.App.ViewModels
                         new ExportOptions { CacheDirectory = cache, ReuseUnchangedXml = reuseXml });
                     exporting = false; SetExportStatus("Analisi dello snapshot in corso…");
                     string archive = null;
+                    PackageSelection selection = null;
                     ProjectAnalysis analysis = null;
                     var diagnostics = new PackageDiagnostics { Environment = new List<EnvironmentCheck>(checks), Log = new List<string>(log.Snapshot()) };
                     await Task.Run(() =>
                     {
                         analysis = XmlProjectAnalyzer.Analyze(directory, snapshot, cancellation.Token,
                             new AnalysisOptions { CacheDirectory = useAnalysisCache ? cache : null, IncludeNetworkXml = !compactReports });
-                        if (zip) archive = PackageWriter.Build(directory, snapshot, question, diagnostics, cancellation.Token, analysis);
+                        if (zip)
+                        {
+                            var package = PackageWriter.BuildPackage(directory, snapshot, question, diagnostics, cancellation.Token, analysis, focusedPackage ? traceQuery : null);
+                            archive = package.ArchivePath; selection = package.Snapshot.Selection;
+                        }
                         else
                         {
                             var timer = System.Diagnostics.Stopwatch.StartNew(); AnalysisWriter.Write(directory, analysis, cancellation.Token);
@@ -210,13 +224,15 @@ namespace TiaAnalyzer.App.ViewModels
                     lastExportDirectory = directory; Notify(nameof(LastExportDirectory));
                     lastZipPath = archive; Notify(nameof(LastZipPath));
                     lastAnalysis = analysis;
-                    symbolSummary = analysis.Symbols.Count + " evidenze di simboli nello snapshot appena esportato."; Notify(nameof(SymbolSummary));
+                    symbolSummary = analysis.Symbols.Count + " evidenze di simboli nella raccolta locale completa."; Notify(nameof(SymbolSummary));
                     currentSnapshotPath = archive ?? Path.Combine(directory, "manifest.json"); Notify(nameof(CurrentSnapshotPath));
+                    InvalidateComparison();
                     performanceSummary = "Export " + snapshot.Metrics.ExportMilliseconds + " ms · analisi " + snapshot.Metrics.AnalysisMilliseconds +
                         " ms · ZIP payload " + snapshot.Metrics.ArchivePayloadMilliseconds + " ms · XML riusati " + snapshot.Metrics.XmlReused +
                         " · cache analisi " + snapshot.Metrics.AnalysisCacheHits + " · cross-reference " + snapshot.CrossReferences.Count;
                     Notify(nameof(PerformanceSummary));
-                    SetExportStatus((demo ? "DEMO · " : "") + snapshot.Artifacts.Count + " oggetti; " + snapshot.Issues.Count + " problemi. " + (zip ? "ZIP: " + archive : "Cartella: " + directory));
+                    SetExportStatus((demo ? "DEMO · " : "") + "Raccolti " + snapshot.Artifacts.Count + " oggetti; " + snapshot.Issues.Count + " errori; " + snapshot.Notes.Count + " avvisi. " +
+                        (selection == null ? "" : "ZIP mirato: " + selection.IncludedArtifacts + " di " + selection.TotalArtifacts + " oggetti. ") + (zip ? "ZIP: " + archive : "Cartella: " + directory));
                     Log(exportStatus);
                 }
                 catch (OperationCanceledException) { SetExportStatus("Esportazione annullata. Cartella incompleta: " + directory); Log(exportStatus); }
@@ -225,6 +241,15 @@ namespace TiaAnalyzer.App.ViewModels
             }
         }
         private void SetExportStatus(string message) { exportStatus = message; Notify(nameof(ExportStatus)); }
+        private void InvalidateComparison() { comparisonStatus = "Snapshot aggiornati: eseguire il confronto."; Notify(nameof(ComparisonStatus)); }
+        private async Task TraceAsync()
+        {
+            var output = Path.Combine(Path.GetFullPath(exportRoot), "Trace_" + Guid.NewGuid().ToString("N"));
+            var trace = await Task.Run(() => ConditionTracer.Trace(lastAnalysis, traceQuery, CancellationToken.None));
+            Directory.CreateDirectory(output); JsonFiles.Write(Path.Combine(output, "trace.json"), trace);
+            traceReport = ConditionTracer.Markdown(trace); PackageWriter.WriteText(output, "trace.md", traceReport);
+            Notify(nameof(TraceReport)); Log("Traccia condizioni: " + Path.Combine(output, "trace.md"));
+        }
         private void SearchSymbols()
         {
             var matches = XmlProjectAnalyzer.Search(lastAnalysis, searchTerm);
@@ -234,6 +259,7 @@ namespace TiaAnalyzer.App.ViewModels
         }
         private async Task CompareAsync()
         {
+            var cancellation = new CancellationTokenSource(); exportCancellation = cancellation; RefreshCommands();
             comparisonStatus = "Confronto in corso…"; Notify(nameof(ComparisonStatus));
             try
             {
@@ -242,7 +268,7 @@ namespace TiaAnalyzer.App.ViewModels
                 SnapshotComparison comparison = null;
                 await Task.Run(() =>
                 {
-                    comparison = SnapshotComparer.Compare(before, after);
+                    comparison = SnapshotComparer.Compare(before, after, cancellation.Token);
                     Directory.CreateDirectory(output);
                     JsonFiles.Write(Path.Combine(output, "comparison.json"), comparison);
                     PackageWriter.WriteText(output, "comparison.md", SnapshotComparer.Markdown(comparison));
@@ -250,8 +276,9 @@ namespace TiaAnalyzer.App.ViewModels
                 comparisonStatus = comparison.Changes.Count + " differenze; " + comparison.Unchanged + " invariati. Report: " + Path.Combine(output, "comparison.md");
                 Log(comparisonStatus);
             }
+            catch (OperationCanceledException) { comparisonStatus = "Confronto annullato."; }
             catch (Exception ex) { comparisonStatus = "Confronto non riuscito: " + ex.Message; throw; }
-            finally { Notify(nameof(ComparisonStatus)); }
+            finally { exportCancellation = null; cancellation.Dispose(); RefreshCommands(); Notify(nameof(ComparisonStatus)); }
         }
         public async Task<bool> CloseAsync()
         {
@@ -290,6 +317,7 @@ namespace TiaAnalyzer.App.ViewModels
             lastExportDirectory = null; Notify(nameof(LastExportDirectory));
             lastZipPath = null; Notify(nameof(LastZipPath));
             lastAnalysis = null; symbolMatches = new List<SymbolEvidence>(); symbolSummary = "Esportare uno snapshot per cercare simboli.";
+            traceReport = "Esportare uno snapshot, poi indicare un simbolo per seguire le condizioni."; Notify(nameof(TraceReport));
             Notify(nameof(SymbolMatches)); Notify(nameof(SymbolSummary));
             SetExportStatus("Collegare un'istanza per esportare XML e manifest.");
             NotifySession();
@@ -308,6 +336,7 @@ namespace TiaAnalyzer.App.ViewModels
             CheckCommand?.Refresh(); ScanCommand?.Refresh(); ConnectCommand?.Refresh(); DisconnectCommand?.Refresh();
             ExportXmlCommand?.Refresh(); ExportZipCommand?.Refresh(); CancelExportCommand?.Refresh();
             CompareCommand?.Refresh(); SearchSymbolsCommand?.Refresh();
+            TraceCommand?.Refresh();
         }
     }
 }

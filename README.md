@@ -1,4 +1,4 @@
-# TIA Project Analyzer · V0.5
+# TIA Project Analyzer · V0.7
 
 Applicazione Windows WPF, C# 7.3, .NET Framework 4.8, x64 per esportare e analizzare
 in sola lettura il software PLC di progetti Siemens TIA Portal V21 già aperti.
@@ -16,6 +16,8 @@ La modalità demo usa esclusivamente dati sintetici.
 - Ricerca variabili/indirizzi nell'ultimo snapshot e confronto tra due ZIP o manifest.
 - Riferimenti incrociati Siemens con tipo di accesso, cache analisi, riuso XML opzionale
   con fingerprint e misure dei tempi; vedere [cache e prestazioni](docs/PERFORMANCE-CACHE.md).
+- Traccia dei consensi SCL nel sottoinsieme supportato, ZIP mirato a un simbolo/blocco
+  e confronto delle singole reti con integrità XML verificata; vedere [condizioni e confronto](docs/CONDITIONS-FOCUS-DIFF.md).
 - Annullamento tra operazioni Siemens, esiti per oggetto, protezioni conservate,
   manifest/ZIP pubblicati soltanto dopo la scrittura completa. Nessun invio automatico.
 
@@ -84,8 +86,8 @@ Build e dati sintetici non verificano il contenuto di un PLC reale.
 Le reti originali vengono conservate. Il testo SCL è ricostruito dai token, i candidati
 testuali sono indicati come tali e le chiamate ambigue restano irrisolte. Non sono
 disponibili valori runtime né uno snapshot atomico rispetto a modifiche in TIA.
-Export HMI, allarmi, parametri azionamenti e analisi semantica completa delle sequenze
-restano estensioni future, distinte dall'inventario hardware.
+Export HMI, allarmi, parametri azionamenti e analisi completa di sequenze/linguaggi
+restano estensioni future. La traccia SCL della V0.7 dichiara le parti non modellate.
 
 L'app non apre/salva progetti, non compila/scarica PLC, non rimuove protezioni,
 non scrive DB/hardware e non esegue operazioni online. Windows/Siemens gestiscono

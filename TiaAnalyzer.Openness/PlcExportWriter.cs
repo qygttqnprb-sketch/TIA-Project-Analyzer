@@ -18,6 +18,7 @@ namespace TiaAnalyzer.Openness
         public bool CaptureCrossReferences { get; }
         public string SourceIdentity { get; set; } = "";
         public string ApiIdentity { get; set; } = "";
+        public int CrossReferenceVisits { get; set; }
         public ExportSnapshot Snapshot { get; }
         public PlcExportWriter(string directory, bool demo, IProgress<ExportProgress> progress, CancellationToken cancellation, ExportOptions options = null)
         {

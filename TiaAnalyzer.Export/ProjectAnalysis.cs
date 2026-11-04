@@ -12,6 +12,9 @@ namespace TiaAnalyzer.Export
         public List<DependencyEvidence> Dependencies { get; set; } = new List<DependencyEvidence>();
         public List<string> Warnings { get; set; } = new List<string>();
         public List<TiaAnalyzer.Core.PlcCrossReference> CrossReferences { get; set; } = new List<TiaAnalyzer.Core.PlcCrossReference>();
+        public List<AssignmentEvidence> Assignments { get; set; } = new List<AssignmentEvidence>();
+        public List<CallBinding> Calls { get; set; } = new List<CallBinding>();
+        public List<LogicCoverage> Coverage { get; set; } = new List<LogicCoverage>();
     }
     public sealed class BlockAnalysis
     {

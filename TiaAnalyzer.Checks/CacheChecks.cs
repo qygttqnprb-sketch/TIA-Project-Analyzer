@@ -46,6 +46,11 @@ internal static class CacheChecks
             var savedTarget = second.Artifacts.Single(a => a.Name == "ConveyorControl"); second.Artifacts.Remove(savedTarget);
             var reduced = XmlProjectAnalyzer.Analyze(secondDir, second, CancellationToken.None, analysisOptions);
             check(reduced.Dependencies.Any(d => d.TargetName == "ConveyorControl" && d.TargetId == null), "cached resolution cannot retain a block removed from the current snapshot");
+            foreach (var entry in Directory.GetFiles(Path.Combine(options.CacheDirectory, "analysis-v1"), "*.blob")) File.WriteAllText(entry, "corrupt analysis");
+            var analysisRecoveryDir = Path.Combine(root, "analysis-recovery"); var analysisRecovery = await service.ExportPlcAsync(analysisRecoveryDir, null, CancellationToken.None, options);
+            var recoveredAnalysis = XmlProjectAnalyzer.Analyze(analysisRecoveryDir, analysisRecovery, CancellationToken.None, analysisOptions);
+            check(analysisRecovery.Metrics.AnalysisCacheMisses == 6 && recoveredAnalysis.Blocks.Count == 6 && analysisRecovery.Issues.Count == 0,
+                "corrupt analysis cache cannot replace or remove current source analysis");
             var bytes = new ContentFileCache(Path.Combine(root, "blobs"));
             var text = Path.Combine(root, "payload"); File.WriteAllText(text, "exact bytes \u00e8\n"); bytes.Save("key", text, CancellationToken.None);
             var restore = Path.Combine(root, "restored"); string warning;

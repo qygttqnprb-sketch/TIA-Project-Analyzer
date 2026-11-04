@@ -14,11 +14,13 @@ namespace TiaAnalyzer.Export
         [System.Runtime.Serialization.DataMember]
         public string ContentHash { get; set; }
         [System.Runtime.Serialization.DataMember]
+        public string ContentHashAlgorithm { get; set; }
+        [System.Runtime.Serialization.DataMember]
         public ProjectAnalysis Analysis { get; set; }
     }
     internal sealed class AnalysisCache
     {
-        internal const string ParserVersion = "0.6.0";
+        internal const string ParserVersion = "0.7.2";
         private readonly ContentFileCache cache;
         public AnalysisCache(string directory) { cache = new ContentFileCache(Path.Combine(directory, "analysis-v1")); }
         private static string Key(ExportArtifact artifact, string hash, bool includeXml)
@@ -37,7 +39,8 @@ namespace TiaAnalyzer.Export
                 using (var stream = File.OpenRead(temporary)) fragment = JsonFiles.Read<AnalysisFragment>(stream);
                 if (fragment?.Version != ParserVersion || fragment.Analysis?.Blocks == null || fragment.Analysis.Symbols == null ||
                     fragment.Analysis.Dependencies == null || fragment.Analysis.Warnings == null || fragment.Analysis.Blocks.Count != 1 ||
-                    fragment.ContentHash == null || fragment.ContentHash.Length != 64 || fragment.Analysis.Blocks[0]?.Networks == null ||
+                    fragment.Analysis.Assignments == null || fragment.Analysis.Calls == null || fragment.Analysis.Coverage == null ||
+                    fragment.ContentHash == null || fragment.ContentHash.Length != 64 || fragment.ContentHashAlgorithm != "xml-tree-v2" || fragment.Analysis.Blocks[0]?.Networks == null ||
                     fragment.Analysis.Blocks[0].ArtifactId != artifact.Id || fragment.Analysis.Blocks[0].File != artifact.RelativePath ||
                     fragment.Analysis.Blocks[0].Project != artifact.Project || fragment.Analysis.Blocks[0].Plc != artifact.Plc ||
                     fragment.Analysis.Symbols.Any(s => s.ArtifactId != artifact.Id) || fragment.Analysis.Dependencies.Any(d => d.FromId != artifact.Id))

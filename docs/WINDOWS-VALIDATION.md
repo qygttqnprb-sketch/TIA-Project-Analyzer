@@ -1,4 +1,4 @@
-# Verifica Windows · V0.5
+# Verifica Windows · V0.7
 
 Compilazione Siemens, WPF demo e progetto PLC reale sono verifiche distinte.
 
@@ -46,6 +46,26 @@ fuori schermo non copre tutte le configurazioni desktop.
    progetto di prova: verificare invariati, metadati, aggiunte/rimozioni e modifiche.
 7. Nessun file nel progetto o richiesta di salvataggio causata dall'app; file solo
    nella destinazione scelta. Nessuna DLL Siemens nell'output.
+
+## Verifiche V0.6/V0.7 sul progetto di prova
+
+1. Confrontare crossreferences.json con i riferimenti incrociati di TIA: accesso,
+   posizione, nome, indirizzo e provenienza. Verificare anche membri senza oggetto
+   UnderlyingObject e servizi non disponibili/protetti: esito esplicito, nessuno sblocco.
+2. Eseguire due raccolte prima senza riuso XML, poi con riuso attivo. Confrontare
+   tutti gli XML e gli hash; modificare codice, interfaccia, commento, UDT dipendente
+   e proprietà separatamente. Ogni modifica pertinente deve invalidare la cache.
+3. Provare un blocco non consistente: nessuna compilazione automatica. Per assenza
+   di impronte usare export normale, con errore per oggetto se non è esportabile.
+4. Verificare le guardie IF/ELSIF/ELSE e i parametri tra chiamanti/istanze su casi noti.
+   IN_OUT, output associati, cicli, salti e reti grafiche devono dichiarare copertura parziale.
+5. Confrontare ZIP completo e mirato: inventario/esclusioni espliciti, nessuna falsa
+   cancellazione nel confronto, selezione ampliata quando la copertura è incerta.
+6. Cambiare un consenso SCL, un contatto LAD e l'ordine delle reti: report prima/dopo
+   coerente e nessuna equivalenza funzionale presunta. Alterare un XML del solo test:
+   il confronto deve rifiutarlo perché non corrisponde al manifest.
+7. Confrontare tempi freddi/caldi e memoria sui progetti rappresentativi. I risultati
+   della piccola demo non misurano le prestazioni di un progetto reale.
 
 ## Rilascio ed esiti
 
