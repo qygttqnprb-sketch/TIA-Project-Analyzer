@@ -8,3 +8,5 @@ Siemens*.dll
 
 # Local Windows build opt-in (Siemens references).
 /Directory.Build.props
+/artifacts/
+*.partial

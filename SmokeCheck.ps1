@@ -49,6 +49,9 @@ try {
     if (-not (Test-Path -LiteralPath $manifest)) { throw 'Demo export did not produce a manifest.' }
     $snapshot = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
     if (-not $snapshot.IsDemo -or $snapshot.Artifacts.Count -ne 6) { throw 'Demo export manifest provenance failed.' }
+    $window.FindName('ExportZipButton').Command.Execute($null)
+    Pump-UntilIdle
+    if (-not (Test-Path -LiteralPath $window.DataContext.LastZipPath)) { throw 'Demo ZIP binding failed.' }
     $window.FindName('DisconnectButton').Command.Execute($null)
     Pump-UntilIdle
     if ($window.FindName('ComponentsList').Items.Count -ne 0) { throw 'Disconnect did not clear components.' }

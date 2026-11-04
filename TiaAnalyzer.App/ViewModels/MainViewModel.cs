@@ -23,6 +23,8 @@ namespace TiaAnalyzer.App.ViewModels
         private string environmentStatus = "Controllo in attesa", lastCheck = "Nessun controllo eseguito", sessionStatus = "Disconnesso";
         private string exportRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TiaAnalyzerExports");
         private string exportStatus = "Collegare un'istanza per esportare XML e manifest.", lastExportDirectory;
+        private string question = "Il motore del nastro non parte in automatico. Trova i blocchi coinvolti e tutti i consensi necessari, citando file e reti. Distingui le condizioni nel codice dalle ipotesi da confermare online.";
+        private string lastZipPath;
         private CancellationTokenSource exportCancellation;
         private ITiaConnectionService Service { get { return demo ? demoConnection : realConnection; } }
         public MainViewModel() : this(new SiemensEnvironmentProbe(), new MockEnvironmentProbe(),
@@ -36,6 +38,7 @@ namespace TiaAnalyzer.App.ViewModels
             ConnectCommand = Command(ConnectAsync, () => !busy && !connected && ready && selected != null && Service.IsAvailable && (demo || consent));
             DisconnectCommand = Command(DisconnectAsync, () => !busy && connected);
             ExportXmlCommand = Command(ExportXmlAsync, () => !busy && connected);
+            ExportZipCommand = Command(() => ExportAsync(true), () => !busy && connected);
             CancelExportCommand = new AsyncCommand(() => { exportCancellation?.Cancel(); return Task.CompletedTask; },
                 () => exportCancellation != null && !exportCancellation.IsCancellationRequested, ReportError);
         }
@@ -54,6 +57,7 @@ namespace TiaAnalyzer.App.ViewModels
         public AsyncCommand ConnectCommand { get; }
         public AsyncCommand DisconnectCommand { get; }
         public AsyncCommand ExportXmlCommand { get; }
+        public AsyncCommand ExportZipCommand { get; }
         public AsyncCommand CancelExportCommand { get; }
         public bool IsDemo
         {
@@ -99,6 +103,8 @@ namespace TiaAnalyzer.App.ViewModels
         public string ExportStatus { get { return exportStatus; } }
         public string ExportRoot { get { return exportRoot; } set { if (busy) return; exportRoot = value; Notify(); } }
         public string LastExportDirectory { get { return lastExportDirectory; } }
+        public string LastZipPath { get { return lastZipPath; } }
+        public string Question { get { return question; } set { if (busy) return; question = value; Notify(); } }
         public IList<EnvironmentCheck> Checks { get { return checks; } }
         public IReadOnlyList<ProjectComponent> Components { get { return components; } }
         public string ComponentSummary { get { return components.Count + (demo ? " componenti sintetici" : " elementi letti dai soli progetti già aperti"); } }
@@ -145,7 +151,8 @@ namespace TiaAnalyzer.App.ViewModels
             await Service.DisconnectAsync();
             ClearSession(); Log("Risorse Attach rilasciate; nessuna richiesta di chiusura TIA.");
         }
-        private async Task ExportXmlAsync()
+        private Task ExportXmlAsync() { return ExportAsync(false); }
+        private async Task ExportAsync(bool zip)
         {
             var root = Path.GetFullPath(exportRoot);
             var directory = Path.Combine(root, (demo ? "DEMO_" : "TIA_") + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0, 8));
@@ -160,9 +167,16 @@ namespace TiaAnalyzer.App.ViewModels
                     });
                     SetExportStatus("Esportazione PLC in corso…");
                     var snapshot = await Service.ExportPlcAsync(directory, progress, cancellation.Token);
-                    await Task.Run(() => SnapshotStore.Complete(directory, snapshot, cancellation.Token));
+                    string archive = null;
+                    var diagnostics = new PackageDiagnostics { Environment = new List<EnvironmentCheck>(checks), Log = new List<string>(log.Snapshot()) };
+                    await Task.Run(() =>
+                    {
+                        if (zip) archive = PackageWriter.Build(directory, snapshot, question, diagnostics, cancellation.Token);
+                        else SnapshotStore.Complete(directory, snapshot, cancellation.Token);
+                    });
                     lastExportDirectory = directory; Notify(nameof(LastExportDirectory));
-                    SetExportStatus((demo ? "DEMO · " : "") + snapshot.Artifacts.Count + " oggetti; " + snapshot.Issues.Count + " problemi. Cartella: " + directory);
+                    lastZipPath = archive; Notify(nameof(LastZipPath));
+                    SetExportStatus((demo ? "DEMO · " : "") + snapshot.Artifacts.Count + " oggetti; " + snapshot.Issues.Count + " problemi. " + (zip ? "ZIP: " + archive : "Cartella: " + directory));
                     Log(exportStatus);
                 }
                 catch (OperationCanceledException) { SetExportStatus("Esportazione annullata. Cartella incompleta: " + directory); Log(exportStatus); }
@@ -205,6 +219,7 @@ namespace TiaAnalyzer.App.ViewModels
         {
             connected = false; components = new List<ProjectComponent>(); sessionStatus = "Disconnesso";
             lastExportDirectory = null; Notify(nameof(LastExportDirectory));
+            lastZipPath = null; Notify(nameof(LastZipPath));
             SetExportStatus("Collegare un'istanza per esportare XML e manifest.");
             NotifySession();
         }
@@ -220,7 +235,7 @@ namespace TiaAnalyzer.App.ViewModels
         private void RefreshCommands()
         {
             CheckCommand?.Refresh(); ScanCommand?.Refresh(); ConnectCommand?.Refresh(); DisconnectCommand?.Refresh();
-            ExportXmlCommand?.Refresh(); CancelExportCommand?.Refresh();
+            ExportXmlCommand?.Refresh(); ExportZipCommand?.Refresh(); CancelExportCommand?.Refresh();
         }
     }
 }

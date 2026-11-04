@@ -1,4 +1,4 @@
-# TIA Project Analyzer · V0.3
+# TIA Project Analyzer · V0.4
 
 Applicazione Windows WPF, C# 7.3, .NET Framework 4.8, x64. Dashboard scura MVVM per diagnostica e analisi in sola lettura delle istanze Siemens TIA Portal V21 già aperte, con adapter demo indipendente.
 
@@ -41,14 +41,14 @@ C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48
 
 La modalità dimostrativa segue lo stesso flusso di rilevamento/selezione, con sei componenti sintetici marcati DEMO e nessun accesso Siemens. Errori e rifiuti compaiono nello stato e nel log in memoria. Durante un'operazione il cambio modalità, la selezione e le altre operazioni sono bloccati. Prima di chiudere la dashboard completare l'eventuale autorizzazione Siemens in attesa.
 
-L'esportazione XML ricorsiva di blocchi, UDT e tag è disponibile dopo il collegamento, anche in demo. Ogni raccolta crea una cartella nuova con manifest JSON, SHA256, inventario hardware ed esiti per oggetto. Vedere [esportazione PLC](docs/PLC-EXPORT.md). Non sono implementati apertura automatica di progetti, modifica hardware, scrittura DB, compilazione PLC, download, accesso online o salvataggio del progetto.
+L'esportazione XML ricorsiva di blocchi, UDT e tag è disponibile dopo il collegamento, anche in demo. **Crea ZIP per ChatGPT** raccoglie uno snapshot nuovo e include domanda, XML, manifest JSON, indice Markdown, report e diagnostica. Nessun invio automatico. Vedere [esportazione PLC](docs/PLC-EXPORT.md) e [pacchetto ChatGPT](docs/CHATGPT-PACKAGE.md). Non sono implementati apertura automatica di progetti, modifica hardware, scrittura DB, compilazione PLC, download, accesso online o salvataggio del progetto.
 
 ## Architettura
 
 - `TiaAnalyzer.App`: WPF/MVVM, comandi asincroni, selezione e consenso; nessun tipo Siemens nel ViewModel.
 - `TiaAnalyzer.Core`: DTO, contratti in sola lettura, categorie di errore e diagnostica in memoria.
 - `TiaAnalyzer.Openness`: coordinatore sessione e worker STA; `SiemensBackend.V21.cs` tipizzato condizionale, fallback esplicito senza DLL e `DemoBackend` separato.
-- `TiaAnalyzer.Export`: manifest JSON, provenienza e impronte SHA256 degli XML esportati.
+- `TiaAnalyzer.Export`: manifest JSON, SHA256, documentazione Markdown e creazione atomica dello ZIP.
 - `TiaAnalyzer.Checks`: test portabili con backend simulati; non certificano runtime Windows net48, binding WPF o API Siemens.
 
 ## Verifiche

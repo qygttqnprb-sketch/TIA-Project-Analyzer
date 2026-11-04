@@ -34,7 +34,10 @@
     <TextBlock Text="Esporta blocchi, UDT e tabelle variabili dalle sessioni aperte. Ogni operazione crea una cartella nuova con manifest ed esiti. Nessuna modifica al progetto PLC." Foreground="#A1B2C4" Margin="0,0,0,12"/>
     <TextBlock Text="Cartella di destinazione" Foreground="#A1B2C4"/>
     <TextBox x:Name="ExportRoot" Text="{Binding ExportRoot, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanChangeMode}" Padding="10" Margin="0,6,0,12" AutomationProperties.Name="Cartella di destinazione esportazione"/>
-    <WrapPanel><Button x:Name="ExportXmlButton" Content="Esporta XML" Command="{Binding ExportXmlCommand}"/><Button x:Name="CancelExportButton" Content="Annulla esportazione" Command="{Binding CancelExportCommand}"/></WrapPanel>
+    <TextBlock Text="Domanda da includere nel pacchetto" Foreground="#A1B2C4"/>
+    <TextBox x:Name="Question" Text="{Binding Question, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanChangeMode}" Padding="10" Margin="0,6,0,12" MinHeight="80" AcceptsReturn="True" TextWrapping="Wrap" AutomationProperties.Name="Domanda per l'analisi del progetto"/>
+    <WrapPanel><Button x:Name="ExportXmlButton" Content="Esporta XML" Command="{Binding ExportXmlCommand}"/><Button x:Name="ExportZipButton" Content="Crea ZIP per ChatGPT" Command="{Binding ExportZipCommand}"/><Button x:Name="CancelExportButton" Content="Annulla esportazione" Command="{Binding CancelExportCommand}"/></WrapPanel>
+    <TextBlock Text="{Binding LastZipPath}" Foreground="#65E1C8" Margin="0,12,0,0"/>
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,16,0,0"><StackPanel>
     <TextBlock Text="06   DIAGNOSTICA SESSIONE / LOG IN MEMORIA" Foreground="#A1B2C4" FontWeight="Bold" Margin="0,0,0,12"/>

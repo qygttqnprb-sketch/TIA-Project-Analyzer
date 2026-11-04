@@ -33,10 +33,16 @@ namespace TiaAnalyzer.Core
         public string SchemaVersion { get; set; } = "1.0";
         public string CreatedUtc { get; set; } = DateTime.UtcNow.ToString("O");
         public bool IsDemo { get; set; }
+        public string Question { get; set; }
         public List<ExportArtifact> Artifacts { get; set; } = new List<ExportArtifact>();
         public List<ExportIssue> Issues { get; set; } = new List<ExportIssue>();
         public List<ProjectComponent> Components { get; set; } = new List<ProjectComponent>();
         public List<string> Limitations { get; set; } = new List<string>();
+    }
+    public sealed class PackageDiagnostics
+    {
+        public List<EnvironmentCheck> Environment { get; set; } = new List<EnvironmentCheck>();
+        public List<string> Log { get; set; } = new List<string>();
     }
     public sealed class ExportProgress
     {
@@ -60,7 +66,7 @@ namespace TiaAnalyzer.Core
             var safe = new StringBuilder();
             foreach (char ch in name ?? "unnamed")
             {
-                if (safe.Length == 28) break;
+                if (safe.Length == 18) break;
                 safe.Append(char.IsLetterOrDigit(ch) || ch == '-' || ch == '_' ? ch : '_');
             }
             // Prefix prevents Windows device names; hash disambiguates sanitized names and case.

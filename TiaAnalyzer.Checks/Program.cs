@@ -22,14 +22,16 @@ internal static class Program
     {
         var service = new TiaConnectionService(backend); services.Add(service); return service;
     }
-    private static async Task Main()
+    private static async Task Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--demo-package") { await PackageChecks.GenerateDemo(args[1]); return; }
         try
         {
             await AdapterTests();
             await ViewModelTests();
             MetadataTests();
             await ExportChecks.Run(Check);
+            await PackageChecks.Run(Check);
             Console.WriteLine(passed + " checks passed; simulated adapters/source-level .NET 10 only. Siemens V21 and WPF not validated.");
         }
         finally { foreach (var service in services) await service.ShutdownAsync(); }
@@ -132,6 +134,15 @@ internal static class Program
         vm.SelectedInstance = vm.Instances[0];
         await vm.ConnectCommand.ExecuteAsync();
         Check(vm.Components.Count == 6 && vm.Components.All(x => x.Status == "DEMO") && vm.SessionStatus.StartsWith("MOCK"), "demo remains independent with synthetic data");
+        var vmExport = Path.Combine(Path.GetTempPath(), "tia-vm-export-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            vm.ExportRoot = vmExport; vm.Question = "Motore fermo";
+            await vm.ExportZipCommand.ExecuteAsync();
+            Check(File.Exists(vm.LastZipPath) && File.Exists(Path.Combine(vm.LastExportDirectory, "manifest.json")) &&
+                !vm.IsBusy && demo.HasSession, "VM one-click ZIP workflow completes and keeps session attached");
+        }
+        finally { if (Directory.Exists(vmExport)) Directory.Delete(vmExport, true); }
         var attachCount = backend.AttachCalls;
         await SwitchMode(vm, false);
         Check(backend.AttachCalls == attachCount && vm.Components.Count == 0 && !demo.HasSession, "switch from demo never auto-attaches real portal");
