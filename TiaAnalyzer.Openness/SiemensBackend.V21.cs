@@ -51,7 +51,7 @@ namespace TiaAnalyzer.Openness
         private static TiaConnectionException Denied(Exception ex)
         {
             return new TiaConnectionException(ConnectionFailure.AuthorizationDenied,
-                "Accesso Openness rifiutato. Verificare il dialogo Siemens e i permessi Windows; nessun consenso automatico.", ex);
+                "Accesso Openness rifiutato. " + OpennessAuthorization.Recovery, ex);
         }
         private sealed class AttachedPortal : IAttachedPortal
         {

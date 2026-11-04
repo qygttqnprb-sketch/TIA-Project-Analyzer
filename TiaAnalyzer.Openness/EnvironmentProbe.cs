@@ -27,7 +27,8 @@ namespace TiaAnalyzer.Openness {
      available=false; checks.Add(new EnvironmentCheck{Name=file,Status="ERRORE",Detail=ex.Message});
     }
    }
-   checks.Add(new EnvironmentCheck{Name="Accesso Openness",Status="DA VERIFICARE",Detail="Le DLL non garantiscono l'accesso. Autorizzazione e collegamento a un'istanza aperta saranno verificati con la futura connessione reale."});
+   checks.Add(OpennessAuthorization.Inspect());
+   checks.Add(new EnvironmentCheck{Name="Accesso Openness",Status="DA VERIFICARE",Detail="Le DLL e il gruppo Windows non garantiscono Attach. Selezionare l'istanza e verificare il consenso nel dialogo Siemens."});
    checks.Add(new EnvironmentCheck{Name="Protezione progetto",Status="SOLA LETTURA",Detail="Nessuna apertura, modifica, compilazione o salvataggio di progetti TIA."});
    return new EnvironmentReport{Available=available,Checks=checks};
   }

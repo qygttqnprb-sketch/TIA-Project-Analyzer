@@ -23,7 +23,7 @@ function Pump-UntilIdle {
 }
 try {
     Pump-UntilIdle
-    if ($window.FindName('Checks').Items.Count -ne 6) { throw 'Real diagnostics binding failed.' }
+    if ($window.FindName('Checks').Items.Count -ne 7) { throw 'Real diagnostics binding failed.' }
     if ($window.FindName('ConnectButton').IsEnabled) { throw 'No automatic selection or real connection permitted.' }
     $window.FindName('MockMode').IsChecked = $true
     Pump-UntilIdle

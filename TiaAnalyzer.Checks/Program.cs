@@ -155,7 +155,7 @@ internal static class Program
         try
         {
             var report = new SiemensEnvironmentProbe(temp).Inspect();
-            Check(!report.Available && report.Checks.Count == 6, "missing Siemens directory diagnosed");
+            Check(!report.Available && report.Checks.Count == 7, "missing Siemens directory diagnosed");
             Directory.CreateDirectory(temp);
             File.WriteAllText(Path.Combine(temp, "Siemens.Engineering.Base.dll"), "invalid");
             File.Copy(typeof(Program).Assembly.Location, Path.Combine(temp, "Siemens.Engineering.Step7.dll"));
@@ -165,6 +165,10 @@ internal static class Program
         finally { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
         var log = new DiagnosticLog(); for (int i = 0; i < 120; i++) log.Add("event " + i);
         Check(log.Snapshot().Count == 100, "diagnostic log bounded in memory");
+        Check(OpennessAuthorization.Describe(false).Status == "ERRORE" &&
+            OpennessAuthorization.Describe(false).Detail.Contains("disconnettersi completamente"), "missing token membership explains full Windows sign-out");
+        Check(OpennessAuthorization.Describe(true).Detail.Contains("consenso"), "membership does not imply Siemens authorization");
+        Check(OpennessAuthorization.Describe(null).Status == "DA VERIFICARE", "unknown authorization is not reported as denied or granted");
     }
     private static async Task Expect(ConnectionFailure failure, Func<Task> action, string name)
     {

@@ -2,7 +2,7 @@
 
 Applicazione Windows WPF, C# 7.3, .NET Framework 4.8, x64. Dashboard scura MVVM per diagnostica e analisi in sola lettura delle istanze Siemens TIA Portal V21 già aperte, con adapter demo indipendente.
 
-La V0.1 è stata compilata e avviata correttamente sul PC Windows dall'utente, con DLL V21 rilevate. **La connessione Siemens V0.2 non è stata compilata né verificata nel cloud: richiede compilazione e prova su Windows con TIA Portal V21.**
+La V0.1 è stata avviata su Windows dall'utente. L'adapter V0.2 è stato compilato contro le DLL V21 installate su Windows il 4 novembre 2026. **Attach e lettura di un progetto reale restano da verificare dopo l'autorizzazione IT.** La dashboard controlla il gruppo Openness nel token Windows corrente; vedere [autorizzazione Openness](docs/OPENNESS-AUTHORIZATION.md).
 
 ## Avvio su Windows
 
