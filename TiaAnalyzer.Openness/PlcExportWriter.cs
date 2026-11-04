@@ -31,20 +31,19 @@ namespace TiaAnalyzer.Openness
             Snapshot.Issues.Add(new ExportIssue { Source = source, Message = error.GetType().Name + ": " + error.Message });
         }
         public void Write(string project, string plc, string group, string name, string kind, string language,
-            bool isProtected, Action<FileInfo> export)
+            bool isProtected, Action<FileInfo> export, int? number = null)
         {
             CheckCancellation();
-            var id = string.Join("\n", new[] { project, plc, group, kind, name });
-            var artifact = new ExportArtifact { Id = ExportPaths.Hash(id), Project = project, Plc = plc,
-                Group = group, Name = name, Kind = kind, Language = language, Protected = isProtected, Status = "Failed" };
+            var artifact = new ExportArtifact { Id = ExportPaths.Identity(project, plc, group, kind, name), Project = project, Plc = plc,
+                Group = group, Name = name, Kind = kind, Language = language, Number = number, Protected = isProtected, Status = "Failed" };
             artifact.RelativePath = "plc/" + ExportPaths.Segment(project) + "/" + ExportPaths.Segment(plc) + "/" +
                 ExportPaths.Segment(group + "/" + kind) + "/" + ExportPaths.Segment(name) + ".xml";
             var path = ExportPaths.Resolve(directory, artifact.RelativePath);
             if (Snapshot.Artifacts.Exists(a => a.Id == artifact.Id)) throw new IOException("Identità duplicata nell'esportazione: " + name);
             Snapshot.Artifacts.Add(artifact);
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
             try
             {
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
                 // Siemens receives a unique path. Existing files are never overwritten.
                 if (File.Exists(path)) throw new IOException("Il file di destinazione esiste già.");
                 export(new FileInfo(path));

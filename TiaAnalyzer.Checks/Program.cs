@@ -32,7 +32,8 @@ internal static class Program
             MetadataTests();
             await ExportChecks.Run(Check);
             await PackageChecks.Run(Check);
-            Console.WriteLine(passed + " checks passed; simulated adapters/source-level .NET 10 only. Siemens V21 and WPF not validated.");
+            await AnalysisChecks.Run(Check);
+            Console.WriteLine(passed + " checks passed on .NET 10 with synthetic/fake data. No real TIA project attached. Run TiaAnalyzer.WpfChecks for net48/WPF.");
         }
         finally { foreach (var service in services) await service.ShutdownAsync(); }
     }
@@ -141,6 +142,11 @@ internal static class Program
             await vm.ExportZipCommand.ExecuteAsync();
             Check(File.Exists(vm.LastZipPath) && File.Exists(Path.Combine(vm.LastExportDirectory, "manifest.json")) &&
                 !vm.IsBusy && demo.HasSession, "VM one-click ZIP workflow completes and keeps session attached");
+            vm.SearchTerm = "SafetyOK"; vm.SearchSymbolsCommand.Execute(null);
+            Check(vm.SymbolMatches.Any(s => s.Block == "ConveyorControl"), "VM searches the exported snapshot without Siemens calls");
+            vm.PreviousSnapshotPath = vm.LastZipPath;
+            await vm.CompareCommand.ExecuteAsync();
+            Check(vm.ComparisonStatus.StartsWith("0 differenze"), "VM compares ZIP snapshots and writes local reports");
         }
         finally { if (Directory.Exists(vmExport)) Directory.Delete(vmExport, true); }
         var attachCount = backend.AttachCalls;
@@ -169,9 +175,11 @@ internal static class Program
             Check(!report.Available && report.Checks.Count == 7, "missing Siemens directory diagnosed");
             Directory.CreateDirectory(temp);
             File.WriteAllText(Path.Combine(temp, "Siemens.Engineering.Base.dll"), "invalid");
-            File.Copy(typeof(Program).Assembly.Location, Path.Combine(temp, "Siemens.Engineering.Step7.dll"));
+            File.WriteAllText(Path.Combine(temp, "Siemens.Engineering.Step7.dll"), "invalid");
             report = new SiemensEnvironmentProbe(temp).Inspect();
-            Check(!report.Available && report.Checks[2].Status == "ERRORE" && report.Checks[3].Status == "ERRORE", "invalid metadata and wrong identity rejected");
+            Check(!report.Available && report.Checks[2].Status == "ERRORE" && report.Checks[3].Status == "ERRORE", "invalid assembly metadata rejected");
+            Check(!SiemensEnvironmentProbe.IsV21Identity("Siemens.Engineering.Step7.dll", new System.Reflection.AssemblyName("Different, Version=21.0.0.0")) &&
+                !SiemensEnvironmentProbe.IsV21Identity("Siemens.Engineering.Step7.dll", new System.Reflection.AssemblyName("Siemens.Engineering.Step7, Version=20.0.0.0")), "wrong assembly identity and version rejected");
         }
         finally { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
         var log = new DiagnosticLog(); for (int i = 0; i < 120; i++) log.Add("event " + i);

@@ -20,6 +20,23 @@ namespace TiaAnalyzer.Export
         {
             return (T)new DataContractJsonSerializer(typeof(T)).ReadObject(stream);
         }
+        public static void WriteAtomic<T>(string path, T value, CancellationToken cancellation)
+        {
+            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".partial";
+            bool owned = false;
+            try
+            {
+                using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write))
+                {
+                    owned = true;
+                    using (var writer = JsonReaderWriterFactory.CreateJsonWriter(stream, Encoding.UTF8, false, true, "  "))
+                        new DataContractJsonSerializer(typeof(T)).WriteObject(writer, value);
+                }
+                cancellation.ThrowIfCancellationRequested();
+                File.Move(temporary, path); owned = false;
+            }
+            finally { if (owned && File.Exists(temporary)) File.Delete(temporary); }
+        }
     }
     public static class SnapshotStore
     {
@@ -41,7 +58,7 @@ namespace TiaAnalyzer.Export
             }
             cancellation.ThrowIfCancellationRequested();
             JsonFiles.Write(Path.Combine(directory, "components.json"), snapshot.Components);
-            JsonFiles.Write(Path.Combine(directory, "manifest.json"), snapshot);
+            JsonFiles.WriteAtomic(Path.Combine(directory, "manifest.json"), snapshot, cancellation);
         }
     }
 }

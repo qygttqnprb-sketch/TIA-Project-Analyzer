@@ -24,7 +24,7 @@ internal static class PackageChecks
             var zip = PackageWriter.Build(directory, snapshot, "Perché il motore è fermo?", new PackageDiagnostics(), CancellationToken.None);
             using (var archive = ZipFile.OpenRead(zip))
             {
-                check(archive.Entries.Count == 13 && archive.GetEntry("README.md") != null && archive.GetEntry("unrelated-secret.txt") == null,
+                check(archive.Entries.Count == 23 && archive.GetEntry("README.md") != null && archive.GetEntry("analysis.json") != null && archive.GetEntry("unrelated-secret.txt") == null,
                     "ZIP contains only declared XML and package documents");
                 ExportSnapshot manifest;
                 using (var stream = archive.GetEntry("manifest.json").Open()) manifest = JsonFiles.Read<ExportSnapshot>(stream);
@@ -47,7 +47,13 @@ internal static class PackageChecks
                 cancellation.Cancel(); bool cancelled = false;
                 try { PackageWriter.CreateArchive(directory, failed, new[] { "manifest.json" }, cancellation.Token); } catch (OperationCanceledException) { cancelled = true; }
                 check(cancelled && !File.Exists(failed), "cancelled archive never appears complete");
+                var cancelledManifest = Path.Combine(root, "cancelled-manifest.json"); cancelled = false;
+                try { JsonFiles.WriteAtomic(cancelledManifest, snapshot, cancellation.Token); } catch (OperationCanceledException) { cancelled = true; }
+                check(cancelled && !File.Exists(cancelledManifest) && Directory.GetFiles(root, "*.partial").Length == 0, "cancelled manifest is not published and cleans its temporary file");
             }
+            var protectedManifest = Path.Combine(root, "existing-manifest.json"); File.WriteAllText(protectedManifest, "preserve");
+            overwrite = false; try { JsonFiles.WriteAtomic(protectedManifest, snapshot, CancellationToken.None); } catch (IOException) { overwrite = true; }
+            check(overwrite && File.ReadAllText(protectedManifest) == "preserve", "atomic manifest never overwrites an existing file");
         }
         finally { await service.ShutdownAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

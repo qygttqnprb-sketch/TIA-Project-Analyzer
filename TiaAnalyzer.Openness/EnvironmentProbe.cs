@@ -20,7 +20,7 @@ namespace TiaAnalyzer.Openness {
     try {
      // Metadata inspection only; does not load or execute Siemens assemblies.
      var identity=AssemblyName.GetAssemblyName(Path.Combine(libraryPath,file));
-     bool valid=identity.Name==Path.GetFileNameWithoutExtension(file) && identity.Version!=null && identity.Version.Major==21;
+     bool valid=IsV21Identity(file, identity);
      available &= valid;
      checks.Add(new EnvironmentCheck {Name=file,Status=valid?"OK":"ERRORE",Detail="Identità: "+identity.Name+" • versione: "+identity.Version});
     } catch(Exception ex) when(ex is IOException || ex is UnauthorizedAccessException || ex is BadImageFormatException || ex is System.Security.SecurityException) {
@@ -31,6 +31,9 @@ namespace TiaAnalyzer.Openness {
    checks.Add(new EnvironmentCheck{Name="Accesso Openness",Status="DA VERIFICARE",Detail="Le DLL e il gruppo Windows non garantiscono Attach. Selezionare l'istanza e verificare il consenso nel dialogo Siemens."});
    checks.Add(new EnvironmentCheck{Name="Protezione progetto",Status="SOLA LETTURA",Detail="Nessuna apertura, modifica, compilazione o salvataggio di progetti TIA."});
    return new EnvironmentReport{Available=available,Checks=checks};
+  }
+  public static bool IsV21Identity(string file, AssemblyName identity) {
+   return identity!=null && identity.Name==Path.GetFileNameWithoutExtension(file) && identity.Version!=null && identity.Version.Major==21;
   }
  }
  public sealed class MockEnvironmentProbe : IEnvironmentProbe {

@@ -44,7 +44,7 @@ namespace TiaAnalyzer.Openness
             }
             private static void ExportDeviceGroup(DeviceUserGroup group, string project, string parent, HashSet<Device> visited, PlcExportWriter writer)
             {
-                var path = parent + "/" + group.Name;
+                var path = parent + "/" + Uri.EscapeDataString(group.Name);
                 Traverse(writer, project + path, () =>
                 {
                     foreach (Device device in group.Devices) ExportDevice(device, project, path, visited, writer);
@@ -56,19 +56,19 @@ namespace TiaAnalyzer.Openness
                 if (!visited.Add(device)) return;
                 Traverse(writer, project + "/" + device.Name, () =>
                 {
-                    foreach (DeviceItem item in device.DeviceItems) ExportItem(item, project, parent + "/" + device.Name, writer);
+                    foreach (DeviceItem item in device.DeviceItems) ExportItem(item, project, parent + "/" + Uri.EscapeDataString(device.Name), writer);
                 });
             }
             private static void ExportItem(DeviceItem item, string project, string parent, PlcExportWriter writer)
             {
-                var path = parent + "/" + item.Name;
+                var path = parent + "/" + Uri.EscapeDataString(item.Name);
                 Traverse(writer, project + path, () =>
                 {
                     var container = item.GetService<SoftwareContainer>();
                     var plc = container == null ? null : container.Software as PlcSoftware;
                     if (plc != null)
                     {
-                        var plcPath = path + "/" + plc.Name;
+                        var plcPath = path + "/" + Uri.EscapeDataString(plc.Name);
                         ExportBlocks(plc.BlockGroup, project, plcPath, "Blocks", writer);
                         ExportTypes(plc.TypeGroup, project, plcPath, "Types", writer);
                         ExportTags(plc.TagTableGroup, project, plcPath, "Tags", writer);
@@ -87,7 +87,7 @@ namespace TiaAnalyzer.Openness
             }
             private static void ExportUnit(PlcUnitBase unit, string project, string plc, PlcExportWriter writer)
             {
-                var path = "Units/" + unit.Name;
+                var path = "Units/" + Uri.EscapeDataString(unit.Name);
                 Traverse(writer, project + plc + path, () =>
                 {
                     ExportBlocks(unit.BlockGroup, project, plc, path + "/Blocks", writer);
@@ -99,34 +99,47 @@ namespace TiaAnalyzer.Openness
             {
                 Traverse(writer, project + plc + "/" + path, () =>
                 {
-                    foreach (PlcBlock block in group.Blocks) ExportBlock(block, project, plc, path, writer);
-                    foreach (PlcBlockUserGroup child in group.Groups) ExportBlocks(child, project, plc, path + "/" + child.Name, writer);
+                    foreach (PlcBlock block in group.Blocks)
+                        Traverse(writer, project + plc + path + "/" + block.Name, () => ExportBlock(block, project, plc, path, writer));
+                    foreach (PlcBlockUserGroup child in group.Groups) ExportBlocks(child, project, plc, path + "/" + Uri.EscapeDataString(child.Name), writer);
                     var system = group as PlcBlockSystemGroup;
                     if (system != null)
-                        foreach (PlcSystemBlockGroup child in system.SystemBlockGroups) ExportSystemBlocks(child, project, plc, path + "/System/" + child.Name, writer);
+                        foreach (PlcSystemBlockGroup child in system.SystemBlockGroups) ExportSystemBlocks(child, project, plc, path + "/System/" + Uri.EscapeDataString(child.Name), writer);
                 });
             }
             private static void ExportSystemBlocks(PlcSystemBlockGroup group, string project, string plc, string path, PlcExportWriter writer)
             {
                 Traverse(writer, project + plc + path, () =>
                 {
-                    foreach (PlcBlock block in group.Blocks) ExportBlock(block, project, plc, path, writer);
-                    foreach (PlcSystemBlockGroup child in group.Groups) ExportSystemBlocks(child, project, plc, path + "/" + child.Name, writer);
+                    foreach (PlcBlock block in group.Blocks)
+                        Traverse(writer, project + plc + path + "/" + block.Name, () => ExportBlock(block, project, plc, path, writer));
+                    foreach (PlcSystemBlockGroup child in group.Groups) ExportSystemBlocks(child, project, plc, path + "/" + Uri.EscapeDataString(child.Name), writer);
                 });
             }
             private static void ExportBlock(PlcBlock block, string project, string plc, string group, PlcExportWriter writer)
             {
                 writer.Write(project, plc, group, block.Name, block.GetType().Name, block.ProgrammingLanguage.ToString(),
-                    block.IsKnowHowProtected, file => block.Export(file, ExportOptions.WithDefaults));
+                    block.IsKnowHowProtected, file => block.Export(file, ExportOptions.WithDefaults), block.Number);
             }
             private static void ExportTypes(PlcTypeGroup group, string project, string plc, string path, PlcExportWriter writer)
             {
                 Traverse(writer, project + plc + path, () =>
                 {
                     foreach (PlcType type in group.Types)
-                        writer.Write(project, plc, path, type.Name, "UDT", "", type.IsKnowHowProtected,
-                            file => type.Export(file, ExportOptions.WithDefaults));
-                    foreach (PlcTypeUserGroup child in group.Groups) ExportTypes(child, project, plc, path + "/" + child.Name, writer);
+                        Traverse(writer, project + plc + path + "/" + type.Name, () =>
+                            writer.Write(project, plc, path, type.Name, "UDT", "", type.IsKnowHowProtected,
+                                file => type.Export(file, ExportOptions.WithDefaults)));
+                    foreach (PlcTypeUserGroup child in group.Groups) ExportTypes(child, project, plc, path + "/" + Uri.EscapeDataString(child.Name), writer);
+                    var system = group as PlcTypeSystemGroup;
+                    if (system != null)
+                        foreach (PlcSystemTypeGroup child in system.SystemTypeGroups)
+                            Traverse(writer, project + plc + path + "/System/" + child.Name, () =>
+                            {
+                                foreach (PlcType type in child.Types)
+                                    Traverse(writer, project + plc + path + "/System/" + child.Name + "/" + type.Name, () =>
+                                        writer.Write(project, plc, path + "/System/" + Uri.EscapeDataString(child.Name), type.Name, "UDT", "", type.IsKnowHowProtected,
+                                            file => type.Export(file, ExportOptions.WithDefaults)));
+                            });
                 });
             }
             private static void ExportTags(PlcTagTableGroup group, string project, string plc, string path, PlcExportWriter writer)
@@ -136,7 +149,7 @@ namespace TiaAnalyzer.Openness
                     foreach (PlcTagTable table in group.TagTables)
                         writer.Write(project, plc, path, table.Name, "TagTable", "", false,
                             file => table.Export(file, ExportOptions.WithDefaults));
-                    foreach (PlcTagTableUserGroup child in group.Groups) ExportTags(child, project, plc, path + "/" + child.Name, writer);
+                    foreach (PlcTagTableUserGroup child in group.Groups) ExportTags(child, project, plc, path + "/" + Uri.EscapeDataString(child.Name), writer);
                 });
             }
         }

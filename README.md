@@ -1,64 +1,94 @@
-# TIA Project Analyzer · V0.4
+# TIA Project Analyzer · V0.5
 
-Applicazione Windows WPF, C# 7.3, .NET Framework 4.8, x64. Dashboard scura MVVM per diagnostica e analisi in sola lettura delle istanze Siemens TIA Portal V21 già aperte, con adapter demo indipendente.
+Applicazione Windows WPF, C# 7.3, .NET Framework 4.8, x64 per esportare e analizzare
+in sola lettura il software PLC di progetti Siemens TIA Portal V21 già aperti.
+La modalità demo usa esclusivamente dati sintetici.
 
-La V0.1 è stata avviata su Windows dall'utente. L'adapter V0.2 è stato compilato contro le DLL V21 installate su Windows il 4 novembre 2026. **Attach e lettura di un progetto reale restano da verificare dopo l'autorizzazione IT.** La dashboard controlla il gruppo Openness nel token Windows corrente; vedere [autorizzazione Openness](docs/OPENNESS-AUTHORIZATION.md).
+## Funzioni
 
-## Avvio su Windows
+- Diagnostica DLL V21 e appartenenza al gruppo Openness nel token Windows.
+- Rilevamento istanze e collegamento esplicito al PID; nessun Attach automatico.
+- XML ricorsivi di OB, FB, FC, DB, UDT e tabelle tag, con cartelle, blocchi/tipi
+  di sistema e Software/Safety Units accessibili.
+- ZIP con domanda, XML originali, manifest JSON, SHA256, indice, report,
+  inventario hardware, diagnostica e documentazione di ogni blocco/rete.
+- Chiamate, dipendenze delle istanze DB, dichiarazioni/riferimenti dei simboli e grafo Graphviz.
+- Ricerca variabili/indirizzi nell'ultimo snapshot e confronto tra due ZIP o manifest.
+- Annullamento tra operazioni Siemens, esiti per oggetto, protezioni conservate,
+  manifest/ZIP pubblicati soltanto dopo la scrittura completa. Nessun invio automatico.
 
-Prerequisiti: Visual Studio con workload desktop .NET, targeting pack .NET Framework 4.8, SDK compatibile con `.slnx` (SDK 10 usato nel cloud). Aprire `TIA-Project-Analyzer.slnx`, selezionare `TiaAnalyzer.App`, Debug x64.
+## Build Windows
 
-Build demo/diagnostica, adapter Siemens escluso per default:
+Servono Visual Studio con workload desktop .NET, targeting pack .NET Framework 4.8,
+SDK compatibile con `.slnx` (verificato SDK 10.0.403) e piattaforma x64.
 
 ```powershell
-MSBuild TIA-Project-Analyzer.slnx /restore /t:Rebuild /p:Configuration=Debug /p:Platform=x64
+dotnet build TIA-Project-Analyzer.slnx -c Debug -p:Platform=x64 -p:EnableSiemensOpenness=true
+dotnet build TIA-Project-Analyzer.slnx -c Release -p:Platform=x64 -p:EnableSiemensOpenness=true
 ```
 
-Build con adapter reale e DLL installate localmente:
+Base/Step7 vengono referenziate da `C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48`
+con `Private=false`: nessuna DLL Siemens nel repository/output. Per F5 selezionare
+`TiaAnalyzer.App` e aggiungere un `Directory.Build.props` locale, ignorato da Git:
+
+```xml
+<Project>
+  <PropertyGroup><EnableSiemensOpenness>true</EnableSiemensOpenness></PropertyGroup>
+</Project>
+```
+
+Senza la proprietà viene compilato il fallback: diagnostica/demo funzionano,
+l'accesso Siemens è disabilitato. Dettagli in [OPENNESS-V21.md](docs/OPENNESS-V21.md).
+Eseguibile Release: `TiaAnalyzer.App\bin\x64\Release\TiaAnalyzer.App.exe`.
+
+## Uso
+
+1. Verificare l'ambiente e il gruppo Openness. Se manca, seguire le
+   [indicazioni IT](docs/OPENNESS-AUTHORIZATION.md), poi rifare l'accesso a Windows.
+2. Aprire manualmente un progetto di prova in TIA V21 con PLC offline.
+3. Rilevare, selezionare il PID, confermare e collegarsi. Rispondere al dialogo Siemens.
+4. Scegliere la cartella, scrivere la domanda e premere **Crea ZIP per ChatGPT**.
+5. Controllare report, esiti Failed/InterfaceOnly e limitazioni; allegare manualmente lo ZIP.
+6. Cercare simboli oppure confrontare due esportazioni con **Sfoglia**.
+7. Disconnettere: TIA e il progetto devono restare aperti.
+
+La demo segue lo stesso flusso e produce sei XML sintetici, marcati DEMO nel manifest.
+
+## Test
 
 ```powershell
-MSBuild TIA-Project-Analyzer.slnx /restore /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /p:EnableSiemensOpenness=true
-```
-
-Per usare F5 con adapter reale abilitato, vedere il file locale `Directory.Build.props` documentato in [docs/OPENNESS-V21.md](docs/OPENNESS-V21.md), insieme a riferimenti, resolver e superficie API da verificare.
-
-Le DLL Siemens non vengono incluse nel repository né copiate nell'output. Reference locali con `Private=false`:
-
-```text
-C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48
-  Siemens.Engineering.Base.dll
-  Siemens.Engineering.Step7.dll
-```
-
-## Flusso esplicito di collegamento
-
-1. All'avvio viene eseguita soltanto la diagnostica dei metadati. Nessun Attach automatico.
-2. Premere **Rileva istanze TIA / demo** per visualizzare PID, versione eseguibile, percorso e progetto associato se disponibile. Nessuna selezione automatica.
-3. Selezionare manualmente l'istanza. Per il reale, confermare l'uso di un progetto di prova e premere **Collega istanza selezionata**.
-4. Rispondere all'eventuale richiesta Openness nel dialogo Siemens. L'app non concede autorizzazioni automaticamente.
-5. Dopo Attach vengono letti esclusivamente i progetti già aperti, i dispositivi, gli elementi hardware e il software STEP 7 dove disponibile. La dashboard mostra progetto, percorso gerarchico, tipo e stato.
-6. **Disconnetti** rilascia il solo handle Attach. TIA Portal e i progetti già aperti devono restare attivi. Anche cambio modalità e chiusura della dashboard rilasciano le risorse possedute.
-
-La modalità dimostrativa segue lo stesso flusso di rilevamento/selezione, con sei componenti sintetici marcati DEMO e nessun accesso Siemens. Errori e rifiuti compaiono nello stato e nel log in memoria. Durante un'operazione il cambio modalità, la selezione e le altre operazioni sono bloccati. Prima di chiudere la dashboard completare l'eventuale autorizzazione Siemens in attesa.
-
-L'esportazione XML ricorsiva di blocchi, UDT e tag è disponibile dopo il collegamento, anche in demo. **Crea ZIP per ChatGPT** raccoglie uno snapshot nuovo e include domanda, XML, manifest JSON, indice Markdown, report e diagnostica. Nessun invio automatico. Vedere [esportazione PLC](docs/PLC-EXPORT.md) e [pacchetto ChatGPT](docs/CHATGPT-PACKAGE.md). Non sono implementati apertura automatica di progetti, modifica hardware, scrittura DB, compilazione PLC, download, accesso online o salvataggio del progetto.
-
-## Architettura
-
-- `TiaAnalyzer.App`: WPF/MVVM, comandi asincroni, selezione e consenso; nessun tipo Siemens nel ViewModel.
-- `TiaAnalyzer.Core`: DTO, contratti in sola lettura, categorie di errore e diagnostica in memoria.
-- `TiaAnalyzer.Openness`: coordinatore sessione e worker STA; `SiemensBackend.V21.cs` tipizzato condizionale, fallback esplicito senza DLL e `DemoBackend` separato.
-- `TiaAnalyzer.Export`: manifest JSON, SHA256, documentazione Markdown e creazione atomica dello ZIP.
-- `TiaAnalyzer.Checks`: test portabili con backend simulati; non certificano runtime Windows net48, binding WPF o API Siemens.
-
-## Verifiche
-
-```bash
-dotnet build TIA-Project-Analyzer.slnx -c Debug -p:Platform=x64
-dotnet build TIA-Project-Analyzer.slnx -c Release -p:Platform=x64
 dotnet run --project TiaAnalyzer.Checks/TiaAnalyzer.Checks.csproj
+dotnet build TiaAnalyzer.WpfChecks/TiaAnalyzer.WpfChecks.csproj -c Debug -p:Platform=x64 -p:EnableSiemensOpenness=true
+.\TiaAnalyzer.WpfChecks\bin\x64\Debug\net48\TiaAnalyzer.WpfChecks.exe
 ```
 
-Le build cloud compilano **solo il fallback** dell'adapter Siemens. I test collegano i sorgenti su runtime .NET 10 e coprono zero/più istanze, selezione, Attach simulato, rifiuto, errori, rilascio, retry, proprietà dell'handle e serializzazione.
+Il primo runner verifica backend simulati, export, ZIP, analisi XML e confronto su .NET 10.
+Il secondo verifica WPF/net48 fuori schermo: binding, demo, ZIP, ricerca, confronto,
+disconnessione e chiusura; salva immagini e dati sintetici in `artifacts/`.
+Non cambia execution policy e non esegue Attach reale.
 
-Su Windows: `powershell.exe -NoProfile -STA -File .\SmokeCheck.ps1` verifica i binding e il flusso demo; `-RequireSiemens` richiede anche metadati V21 validi ma non esegue Attach reale. Non modificare execution policy aziendali per eseguirlo. Seguire [docs/WINDOWS-VALIDATION.md](docs/WINDOWS-VALIDATION.md) per le prove reali iniziali su un progetto di test e per registrare gli esiti.
+Per uno ZIP di esempio in una cartella nuova:
+
+```powershell
+dotnet run --project TiaAnalyzer.Checks/TiaAnalyzer.Checks.csproj -- --demo-package artifacts/demo
+```
+
+## Stato e limiti
+
+L'adapter reale compila contro Base/Step7 V21 installate; WPF/net48 è verificato in demo.
+**Attach ed export reali restano da provare con un progetto di prova autorizzato aperto in TIA.**
+Build e dati sintetici non verificano il contenuto di un PLC reale.
+
+Le reti originali vengono conservate. Il testo SCL è ricostruito dai token, i candidati
+testuali sono indicati come tali e le chiamate ambigue restano irrisolte. Non sono
+disponibili valori runtime né uno snapshot atomico rispetto a modifiche in TIA.
+Export HMI, allarmi, parametri azionamenti e analisi semantica completa delle sequenze
+restano estensioni future, distinte dall'inventario hardware.
+
+L'app non apre/salva progetti, non compila/scarica PLC, non rimuove protezioni,
+non scrive DB/hardware e non esegue operazioni online. Windows/Siemens gestiscono
+le autorizzazioni generali Openness.
+
+Documentazione: [export PLC](docs/PLC-EXPORT.md), [ZIP](docs/CHATGPT-PACKAGE.md),
+[analisi e confronto](docs/STATIC-ANALYSIS.md), [prove reali Windows](docs/WINDOWS-VALIDATION.md),
+[esiti del 4 novembre 2026](docs/VALIDATION-2026-11-04.md).

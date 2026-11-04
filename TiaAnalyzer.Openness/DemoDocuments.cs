@@ -11,13 +11,13 @@ namespace TiaAnalyzer.Openness
     {
         public static IEnumerable<DemoDocument> Create()
         {
-            yield return Block("Main", "OB", "Blocks", "SCL", "\"ConveyorControl\"(Auto := \"AutoMode\");");
+            yield return Block("Main", "OB", "Blocks", "SCL", "\"ConveyorData\"(Auto := \"AutoMode\");");
             yield return Block("ConveyorControl", "FB", "Blocks/Conveyor", "SCL",
                 "// DEMO: dati sintetici, nessun valore runtime\n" +
                 "#Permissive := \"SafetyOK\" AND \"DriveReady\" AND NOT \"JamDetected\";\n" +
                 "IF #Auto AND #Permissive THEN\n    \"MotorRun\" := TRUE;\nELSE\n    \"MotorRun\" := FALSE;\nEND_IF;");
             yield return Block("ResetFault", "FC", "Blocks/Conveyor", "SCL", "IF \"Reset\" THEN \"Fault\" := FALSE; END_IF;");
-            yield return Block("ConveyorData", "GlobalDB", "Blocks", "DB", null);
+            yield return Block("ConveyorData", "InstanceDB", "Blocks", "DB", null);
             yield return Block("MotorState", "UDT", "Types", "", null);
             yield return new DemoDocument { Name = "ConveyorTags", Kind = "TagTable", Group = "Tags", Language = "",
                 Xml = new XDocument(new XElement("Document", new XElement("SW.Tags.PlcTagTable",
@@ -39,6 +39,10 @@ namespace TiaAnalyzer.Openness
                 new XElement("Interface", new XElement(iface + "Sections", new XElement(iface + "Section", new XAttribute("Name", "Static"),
                     new XElement(iface + "Member", new XAttribute("Name", "Permissive"), new XAttribute("Datatype", "Bool"))))));
             var block = new XElement(kind == "UDT" ? "SW.Types.PlcStruct" : "SW.Blocks." + kind, attributes);
+            if (kind == "InstanceDB") attributes.Add(new XElement("InstanceOfName", "ConveyorControl"));
+            if (kind == "FB")
+                attributes.Element("Interface").Element(iface + "Sections").AddFirst(new XElement(iface + "Section", new XAttribute("Name", "Input"),
+                    new XElement(iface + "Member", new XAttribute("Name", "Auto"), new XAttribute("Datatype", "Bool"))));
             if (source != null) block.Add(new XElement("ObjectList", new XElement("SW.Blocks.CompileUnit", new XAttribute("ID", "1"),
                 new XElement("AttributeList", new XElement("NetworkSource", new XElement(scl + "StructuredText", new XElement(scl + "Text", source)))))));
             return new DemoDocument { Name = name, Kind = kind, Group = group, Language = language, Xml = new XDocument(new XElement("Document", block)).ToString() };

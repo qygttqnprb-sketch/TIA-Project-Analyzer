@@ -40,6 +40,12 @@ internal static class ExportChecks
             check(writer.Snapshot.Artifacts[1].Status == "InterfaceOnly", "know-how protected interface is explicitly marked");
             check(ExportPaths.Segment("A:B") != ExportPaths.Segment("A?B") && ExportPaths.Segment("CON").StartsWith("x_") &&
                 ExportPaths.Segment("Motor") != ExportPaths.Segment("motor"), "Windows filenames disambiguate invalid characters reserved names and case");
+            check(ExportPaths.Identity("a\nb", "c") != ExportPaths.Identity("a", "b\nc"), "artifact identities cannot collide through delimiter characters");
+            var blockedDirectory = Path.Combine(directory, "blocked");
+            var blockedWriter = new PlcExportWriter(blockedDirectory, true, null, CancellationToken.None);
+            File.WriteAllText(Path.Combine(blockedDirectory, "plc"), "a file blocks directory creation");
+            blockedWriter.Write("P", "PLC", "Blocks", "CannotCreateFolder", "FB", "SCL", false, file => File.WriteAllText(file.FullName, "<Document/>"));
+            check(blockedWriter.Snapshot.Artifacts[0].RelativePath == null && blockedWriter.Snapshot.Issues.Count == 1, "directory creation failure cannot leave a usable artifact path");
             foreach (var path in new[] { "../bad", "C:/bad", "/bad", "plc/../../bad", "plc\\bad" })
             {
                 bool rejected = false;

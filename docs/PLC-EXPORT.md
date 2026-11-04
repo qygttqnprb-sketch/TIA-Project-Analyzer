@@ -29,7 +29,7 @@ DriveReady e JamDetected, senza leggere alcun progetto Siemens.
 
 Verificato il 4 novembre 2026: compilazione dell'adapter contro Base/Step7 V21
 installate e test automatici demo. **Esportazione da un progetto TIA reale ancora
-da verificare dopo l'autorizzazione IT.** HMI, allarmi e parametri degli azionamenti
+da verificare con un progetto di prova autorizzato aperto in TIA.** HMI, allarmi e parametri degli azionamenti
 sono estensioni successive; l'inventario hardware non ne sostituisce l'export.
 
 Fonti V21: [blocchi](https://docs.tia.siemens.cloud/r/en-us/v21/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/exporting-blocks),

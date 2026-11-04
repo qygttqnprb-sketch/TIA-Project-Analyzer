@@ -14,6 +14,8 @@ Il pacchetto comprende:
 - `manifest.json`: provenienza DEMO/reale, scope PLC, SHA256, dimensioni ed esiti.
 - `components.json`: inventario dei componenti hardware/software letti.
 - `diagnostics.json`: controlli dell'ambiente e log della sessione.
+- `analysis.json`, `symbols.json`, `dependencies.dot`, `logic.md` e `blocks/`:
+  evidenze delle reti, ricerca variabili e grafo; vedere [analisi statica](STATIC-ANALYSIS.md).
 - `plc/`: blocchi, UDT e tabelle variabili XML, senza riscrittura dei contenuti.
 
 Allegare manualmente lo ZIP a ChatGPT e ripetere o precisare la domanda. Chiedere

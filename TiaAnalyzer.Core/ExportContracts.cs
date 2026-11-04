@@ -4,6 +4,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using System.Runtime.Serialization;
 
 namespace TiaAnalyzer.Core
 {
@@ -16,6 +17,7 @@ namespace TiaAnalyzer.Core
         public string Name { get; set; }
         public string Kind { get; set; }
         public string Language { get; set; }
+        public int? Number { get; set; }
         public string RelativePath { get; set; }
         public string Status { get; set; }
         public string Sha256 { get; set; }
@@ -28,15 +30,24 @@ namespace TiaAnalyzer.Core
         public string Source { get; set; }
         public string Message { get; set; }
     }
+    [DataContract]
     public sealed class ExportSnapshot
     {
+        [DataMember(IsRequired = true)]
         public string SchemaVersion { get; set; } = "1.0";
+        [DataMember(IsRequired = true)]
         public string CreatedUtc { get; set; } = DateTime.UtcNow.ToString("O");
+        [DataMember(IsRequired = true)]
         public bool IsDemo { get; set; }
+        [DataMember]
         public string Question { get; set; }
+        [DataMember(IsRequired = true)]
         public List<ExportArtifact> Artifacts { get; set; } = new List<ExportArtifact>();
+        [DataMember(IsRequired = true)]
         public List<ExportIssue> Issues { get; set; } = new List<ExportIssue>();
+        [DataMember]
         public List<ProjectComponent> Components { get; set; } = new List<ProjectComponent>();
+        [DataMember]
         public List<string> Limitations { get; set; } = new List<string>();
     }
     public sealed class PackageDiagnostics
@@ -60,6 +71,12 @@ namespace TiaAnalyzer.Core
         {
             using (var sha = SHA256.Create())
                 return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? ""))).Replace("-", "").ToLowerInvariant();
+        }
+        public static string Identity(params string[] parts)
+        {
+            var value = new StringBuilder();
+            foreach (var part in parts) { var item = part ?? ""; value.Append(item.Length).Append(':').Append(item); }
+            return Hash(value.ToString());
         }
         public static string Segment(string name)
         {
