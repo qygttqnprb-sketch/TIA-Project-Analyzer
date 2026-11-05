@@ -42,6 +42,37 @@ namespace TiaAnalyzer.App.ViewModels
         private string snapshotWarnings = "";
         private IReadOnlyList<NetworkChoice> networks = new List<NetworkChoice>();
         private NetworkChoice selectedNetwork;
+        private ExportMode exportMode = ExportMode.Full;
+        private string targetObjects = "", resumeDirectory = "", liveExportStatus = "Nessuna esportazione attiva.", lastCheckpoint = "Nessuno";
+        private IReadOnlyList<string> recentExportEvents = new List<string>();
+        public IReadOnlyList<ExportMode> ExportModes { get; } = new[] { ExportMode.Quick, ExportMode.Full, ExportMode.Targeted };
+        public IReadOnlyList<string> ExportModeLabels { get; } = new[] { "Rapida", "Completa", "Mirata" };
+        public int ExportModeIndex { get { return exportMode == ExportMode.Quick ? 0 : exportMode == ExportMode.Full ? 1 : 2; }
+            set { if (busy || value < 0 || value > 2) return; SelectedExportMode = value == 0 ? ExportMode.Quick : value == 1 ? ExportMode.Full : ExportMode.Targeted; } }
+        public ExportMode SelectedExportMode { get { return exportMode; } set { if (busy) return; exportMode = value; Notify(); Notify(nameof(ExportModeIndex)); } }
+        public string TargetObjects { get { return targetObjects; } set { if (busy) return; targetObjects = value; Notify(); } }
+        public string ResumeDirectory { get { return resumeDirectory; } set { if (busy) return; resumeDirectory = value; Notify(); } }
+        public string LiveExportStatus { get { return liveExportStatus; } }
+        public string LastCheckpoint { get { return lastCheckpoint; } }
+        public IReadOnlyList<string> RecentExportEvents { get { return recentExportEvents; } }
+        private async Task MonitorExportAsync(ExportRun run, CancellationToken stop)
+        {
+            do
+            {
+                RefreshExportMonitor(run);
+                try { await Task.Delay(1000, stop); } catch (OperationCanceledException) { break; }
+            } while (!stop.IsCancellationRequested);
+        }
+        private void RefreshExportMonitor(ExportRun run)
+        {
+                var status = run.Status();
+                liveExportStatus = "Export " + status.ExportId + " · " + status.Completed + "/" + (status.Total?.ToString() ?? "? (enumerazione)") +
+                    " XML completati · trascorso " + TimeSpan.FromMilliseconds(status.ElapsedMilliseconds).ToString(@"d\.hh\:mm\:ss") +
+                    " · operazione " + TimeSpan.FromMilliseconds(status.OperationMilliseconds).ToString(@"d\.hh\:mm\:ss") + "\n" +
+                    status.Operation + "\nUltimo XML completato: " + status.LastCompleted;
+                recentExportEvents = status.Events; lastCheckpoint = status.Checkpoint;
+                Notify(nameof(LiveExportStatus)); Notify(nameof(RecentExportEvents)); Notify(nameof(LastCheckpoint));
+        }
         private ITiaConnectionService Service { get { return demo ? demoConnection : realConnection; } }
         public MainViewModel() : this(new SiemensEnvironmentProbe(), new MockEnvironmentProbe(),
             new TiaConnectionService(new SiemensBackend()), new TiaConnectionService(new DemoBackend())) { }
@@ -208,6 +239,8 @@ namespace TiaAnalyzer.App.ViewModels
         private Task ExportXmlAsync() { return ExportAsync(false); }
         private async Task ExportAsync(bool zip)
         {
+            if (exportMode == ExportMode.Targeted && string.IsNullOrWhiteSpace(targetObjects)) throw new InvalidOperationException("Indicare nomi o ID esatti per la raccolta mirata.");
+            if (exportMode != ExportMode.Full && focusedPackage) throw new InvalidOperationException("Il filtro semantico del pacchetto V0.9 richiede la raccolta Completa. Per Mirata usare nomi/ID esatti.");
             if (zip && focusedPackage && string.IsNullOrWhiteSpace(traceQuery)) throw new InvalidOperationException("Indicare il simbolo o blocco del pacchetto mirato.");
             var root = Path.GetFullPath(exportRoot);
             var directory = Path.Combine(root, (demo ? "DEMO_" : "TIA_") + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0, 8));
@@ -218,7 +251,10 @@ namespace TiaAnalyzer.App.ViewModels
             Notify(nameof(WriterReport)); Notify(nameof(WriterSummary));
             Notify(nameof(LastZipPath)); Notify(nameof(LastExportDirectory)); Notify(nameof(SymbolMatches));
             using (var cancellation = new CancellationTokenSource())
+            using (var run = await Task.Run(() => new ExportRun(directory)))
+            using (var monitorStop = new CancellationTokenSource())
             {
+                var monitor = MonitorExportAsync(run, monitorStop.Token);
                 exportCancellation = cancellation; RefreshCommands();
                 try
                 {
@@ -230,7 +266,8 @@ namespace TiaAnalyzer.App.ViewModels
                     SetExportStatus("Esportazione PLC in corso…");
                     var cache = Path.Combine(root, ".tia-cache");
                     var snapshot = await Service.ExportPlcAsync(directory, progress, cancellation.Token,
-                        new ExportOptions { CacheDirectory = cache, ReuseUnchangedXml = reuseXml });
+                        new ExportOptions { CacheDirectory = cache, ReuseUnchangedXml = reuseXml, Run = run, Mode = exportMode,
+                            ResumeDirectory = resumeDirectory, TargetObjects = targetObjects.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim()).ToList() });
                     exporting = false; SetExportStatus("Analisi dello snapshot in corso…");
                     string archive = null;
                     PackageSelection selection = null;
@@ -238,17 +275,22 @@ namespace TiaAnalyzer.App.ViewModels
                     var diagnostics = new PackageDiagnostics { Environment = new List<EnvironmentCheck>(checks), Log = new List<string>(log.Snapshot()) };
                     await Task.Run(() =>
                     {
-                        analysis = XmlProjectAnalyzer.Analyze(directory, snapshot, cancellation.Token,
-                            new AnalysisOptions { CacheDirectory = useAnalysisCache ? cache : null, IncludeNetworkXml = !compactReports });
+                        analysis = exportMode == ExportMode.Quick
+                            ? new ProjectAnalysis { Warnings = new List<string> { "RAPIDA: analisi logica opzionale non eseguita; nessuna completezza semantica dichiarata." } }
+                            : XmlProjectAnalyzer.Analyze(directory, snapshot, cancellation.Token,
+                                new AnalysisOptions { CacheDirectory = useAnalysisCache ? cache : null, IncludeNetworkXml = !compactReports, Run = run });
                         if (zip)
                         {
-                            var package = PackageWriter.BuildPackage(directory, snapshot, question, diagnostics, cancellation.Token, analysis, focusedPackage ? traceQuery : null);
+                            var package = PackageWriter.BuildPackage(directory, snapshot, question, diagnostics, cancellation.Token, analysis, focusedPackage ? traceQuery : null, run);
                             archive = package.ArchivePath; selection = package.Snapshot.Selection;
                         }
                         else
                         {
-                            var timer = System.Diagnostics.Stopwatch.StartNew(); AnalysisWriter.Write(directory, analysis, cancellation.Token);
-                            snapshot.Metrics.DocumentsMilliseconds = timer.ElapsedMilliseconds; SnapshotStore.Complete(directory, snapshot, cancellation.Token);
+                            var timer = System.Diagnostics.Stopwatch.StartNew();
+                            run.Call("Reports.Generate", "ReportGeneration", "Snapshot", "Reports", directory, () => AnalysisWriter.Write(directory, analysis, cancellation.Token));
+                            snapshot.Metrics.DocumentsMilliseconds = timer.ElapsedMilliseconds;
+                            snapshot.Metrics.PhaseMilliseconds = run.Timings();
+                            SnapshotStore.Complete(directory, snapshot, cancellation.Token);
                         }
                     });
                     lastExportDirectory = directory; Notify(nameof(LastExportDirectory));
@@ -256,18 +298,30 @@ namespace TiaAnalyzer.App.ViewModels
                     SetAnalysisContext(new LoadedSnapshot { Path = Path.Combine(directory, "manifest.json"), Snapshot = snapshot, Analysis = analysis }, false);
                     currentSnapshotPath = archive ?? Path.Combine(directory, "manifest.json"); Notify(nameof(CurrentSnapshotPath));
                     InvalidateComparison();
-                    performanceSummary = "Export " + snapshot.Metrics.ExportMilliseconds + " ms · analisi " + snapshot.Metrics.AnalysisMilliseconds +
+                    snapshot.Metrics.PhaseMilliseconds = run.Timings();
+                    await Task.Run(() =>
+                    {
+                        CheckpointStore.Write(Path.Combine(directory, "metrics.json"), snapshot.Metrics);
+                        run.Finish(snapshot.AcquisitionState ?? "Complete");
+                    });
+                    performanceSummary = string.Join(" · ", snapshot.Metrics.PhaseMilliseconds.Select(kv => kv.Key + " " + kv.Value + " ms")) + "\nExport " + snapshot.Metrics.ExportMilliseconds + " ms · analisi " + snapshot.Metrics.AnalysisMilliseconds +
                         " ms · ZIP payload " + snapshot.Metrics.ArchivePayloadMilliseconds + " ms · XML riusati " + snapshot.Metrics.XmlReused +
                         " · cache analisi " + snapshot.Metrics.AnalysisCacheHits + " · cross-reference " + snapshot.CrossReferences.Count;
                     Notify(nameof(PerformanceSummary));
-                    SetExportStatus((demo ? "DEMO · " : "") + "Raccolti " + snapshot.Artifacts.Count + " oggetti; " + snapshot.Issues.Count + " errori; " + snapshot.Notes.Count + " avvisi. " +
+                    SetExportStatus((demo ? "DEMO · " : "") + "[" + snapshot.AcquisitionState + "] Raccolti " + snapshot.Artifacts.Count + " oggetti; " + snapshot.Issues.Count + " errori; " + snapshot.Notes.Count + " avvisi. " +
                         (selection == null ? "" : "ZIP mirato: " + selection.IncludedArtifacts + " di " + selection.TotalArtifacts + " oggetti. ") + (zip ? "ZIP: " + archive : "Cartella: " + directory));
                     Log(exportStatus);
                 }
-                catch (OperationCanceledException) { SetExportStatus("Esportazione annullata. Cartella incompleta: " + directory); Log(exportStatus); }
-                catch (Exception ex) { SetExportStatus("Esportazione non riuscita: " + ex.Message + " · Cartella: " + directory); throw; }
-                finally { exportCancellation = null; RefreshCommands(); }
+                catch (OperationCanceledException) { await Task.Run(() => { MarkInterrupted(directory, "Cancelled"); run.Finish("Cancelled"); }); SetExportStatus("Esportazione annullata fra due operazioni. Checkpoint conservato: " + directory); Log(exportStatus); }
+                catch (Exception ex) { await Task.Run(() => { MarkInterrupted(directory, "Incomplete"); run.Finish("Incomplete", ex.ToString()); }); SetExportStatus("Esportazione non riuscita: " + ex.Message + " · Cartella: " + directory); throw; }
+                finally { monitorStop.Cancel(); await monitor; RefreshExportMonitor(run); exportCancellation = null; RefreshCommands(); }
             }
+        }
+        private static void MarkInterrupted(string directory, string state)
+        {
+            if (!File.Exists(Path.Combine(directory, "checkpoint.json"))) return;
+            var checkpoint = CheckpointStore.Read(directory, false); checkpoint.State = state;
+            CheckpointStore.Write(Path.Combine(directory, "checkpoint.json"), checkpoint);
         }
         private void SetExportStatus(string message) { exportStatus = message; Notify(nameof(ExportStatus)); }
         private void InvalidateComparison() { comparisonStatus = "Snapshot aggiornati: eseguire il confronto."; Notify(nameof(ComparisonStatus)); }

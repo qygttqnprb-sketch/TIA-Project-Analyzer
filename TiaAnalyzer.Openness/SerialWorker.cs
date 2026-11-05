@@ -10,10 +10,13 @@ namespace TiaAnalyzer.Openness
         private readonly BlockingCollection<Action> queue = new BlockingCollection<Action>();
         private readonly TaskCompletionSource<bool> stopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly object gate = new object();
+        private int workerThreadId;
         private bool started;
         private bool closing;
         public Task<T> Run<T>(Func<T> action)
         {
+            if (Thread.CurrentThread.ManagedThreadId == Volatile.Read(ref workerThreadId))
+                throw new InvalidOperationException("Non accodare chiamate Openness dal worker stesso: attendere la coda causerebbe un deadlock.");
             var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
             lock (gate)
             {
@@ -28,6 +31,7 @@ namespace TiaAnalyzer.Openness
                     started = true;
                     var thread = new Thread(() =>
                     {
+                        Volatile.Write(ref workerThreadId, Thread.CurrentThread.ManagedThreadId);
                         try { foreach (var work in queue.GetConsumingEnumerable()) work(); }
                         finally { queue.Dispose(); stopped.TrySetResult(true); }
                     }) { IsBackground = true, Name = "TIA Openness STA" };

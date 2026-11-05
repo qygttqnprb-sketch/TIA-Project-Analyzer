@@ -34,6 +34,7 @@ internal static class NetworkChecks
             var secondDir = Path.Combine(root, "second"); var second = await service.ExportPlcAsync(secondDir, null, CancellationToken.None);
             var motor = second.Artifacts.Single(a => a.Name == "ConveyorControl");
             var motorPath = ExportPaths.Resolve(secondDir, motor.RelativePath); File.WriteAllText(motorPath, File.ReadAllText(motorPath).Replace("AND NOT", "OR NOT"));
+            motor.Sha256 = SnapshotStore.FileHash(motorPath); // Deliberately establish this changed synthetic comparison fixture.
             motor.Fingerprints = null; // Modified fixture has no freshly queried Siemens fingerprint.
             XmlProjectAnalyzer.Analyze(secondDir, second, CancellationToken.None); SnapshotStore.Complete(secondDir, second, CancellationToken.None);
             var compared = SnapshotComparer.Compare(Path.Combine(firstDir, "manifest.json"), Path.Combine(secondDir, "manifest.json"));

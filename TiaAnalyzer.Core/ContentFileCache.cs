@@ -30,6 +30,7 @@ namespace TiaAnalyzer.Core
                     {
                         owned = true;
                         Copy(source, target, sha, cancellation);
+                        target.Flush(true);
                         if (Hex(sha.Hash) != expected) throw new InvalidDataException("Integrità cache non valida.");
                     }
                 }
@@ -55,7 +56,7 @@ namespace TiaAnalyzer.Core
                     output.Write(header, 0, header.Length);
                     Copy(source, output, sha, cancellation);
                     output.Position = "TIA-CACHE-1\n".Length;
-                    var hash = Encoding.ASCII.GetBytes(Hex(sha.Hash)); output.Write(hash, 0, hash.Length);
+                    var hash = Encoding.ASCII.GetBytes(Hex(sha.Hash)); output.Write(hash, 0, hash.Length); output.Flush(true);
                 }
                 cancellation.ThrowIfCancellationRequested();
                 if (File.Exists(entry)) File.Replace(temporary, entry, null); else File.Move(temporary, entry);

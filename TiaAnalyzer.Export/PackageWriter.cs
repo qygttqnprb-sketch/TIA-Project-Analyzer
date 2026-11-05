@@ -16,15 +16,23 @@ namespace TiaAnalyzer.Export
     }
     public static class PackageWriter
     {
-        public static string Build(string directory, ExportSnapshot snapshot, string question, PackageDiagnostics diagnostics, CancellationToken cancellation, ProjectAnalysis analysis = null, string focusQuery = null)
-        { return BuildPackage(directory, snapshot, question, diagnostics, cancellation, analysis, focusQuery).ArchivePath; }
-        public static PackageResult BuildPackage(string directory, ExportSnapshot snapshot, string question, PackageDiagnostics diagnostics, CancellationToken cancellation, ProjectAnalysis analysis = null, string focusQuery = null)
+        public static string Build(string directory, ExportSnapshot snapshot, string question, PackageDiagnostics diagnostics, CancellationToken cancellation, ProjectAnalysis analysis = null, string focusQuery = null, ExportRun run = null)
+        { return BuildPackage(directory, snapshot, question, diagnostics, cancellation, analysis, focusQuery, run).ArchivePath; }
+        public static PackageResult BuildPackage(string directory, ExportSnapshot snapshot, string question, PackageDiagnostics diagnostics, CancellationToken cancellation, ProjectAnalysis analysis = null, string focusQuery = null, ExportRun run = null)
         {
+            if (snapshot.AcquisitionState == "Cancelled" || snapshot.AcquisitionState == "InProgress")
+                throw new InvalidDataException("Non si può pubblicare un pacchetto annullato o ancora in corso.");
             snapshot.Question = question ?? "";
             snapshot.Metrics = snapshot.Metrics ?? new ExportMetrics();
             cancellation.ThrowIfCancellationRequested();
             var entries = new List<string> { "README.md", "QUESTION.md", "index.md", "report.md", "diagnostics.json", "components.json", "manifest.json" };
-            analysis = analysis ?? XmlProjectAnalyzer.Analyze(directory, snapshot, cancellation);
+            if (snapshot.Inventory != null)
+            { JsonFiles.Write(ExportPaths.Resolve(directory, "export-inventory.json"), snapshot.Inventory); entries.Add("export-inventory.json"); }
+            if (!string.IsNullOrWhiteSpace(focusQuery) && (snapshot.ExportMode == "Quick" || snapshot.Selection != null))
+                throw new InvalidOperationException("Il filtro semantico richiede una raccolta completa non già mirata.");
+            analysis = analysis ?? (snapshot.ExportMode == "Quick"
+                ? new ProjectAnalysis { Warnings = new List<string> { "RAPIDA: analisi logica opzionale omessa; nessuna completezza semantica dichiarata." } }
+                : XmlProjectAnalyzer.Analyze(directory, snapshot, cancellation, run == null ? null : new AnalysisOptions { Run = run, IncludeNetworkXml = true }));
             if (!string.IsNullOrWhiteSpace(focusQuery))
             {
                 var inventory = snapshot.Artifacts;
@@ -37,6 +45,10 @@ namespace TiaAnalyzer.Export
                 entries.AddRange(new[] { "inventory.json", "focus.json", "trace.json", "trace.md" });
             }
             var documentTimer = System.Diagnostics.Stopwatch.StartNew();
+            using (var documentScope = run?.Begin("Reports.Generate", "ReportGeneration", "Snapshot", "Reports", directory))
+            {
+            try
+            {
             entries.AddRange(AnalysisWriter.Write(directory, analysis, cancellation));
             WriteText(directory, "README.md", "# TIA Project Analyzer\n\n" +
                 (snapshot.IsDemo ? "**DEMO: tutti i dati PLC sono sintetici.**\n\n" : "Snapshot offline del progetto TIA Portal V21.\n\n") +
@@ -53,21 +65,28 @@ namespace TiaAnalyzer.Export
             WriteText(directory, "report.md", BuildReport(snapshot));
             JsonFiles.Write(ExportPaths.Resolve(directory, "diagnostics.json"), diagnostics ?? new PackageDiagnostics());
             snapshot.Metrics.DocumentsMilliseconds = documentTimer.ElapsedMilliseconds;
+            documentScope?.Success();
+            }
+            catch (Exception ex) { documentScope?.Fail(ex); throw; }
+            }
+            snapshot.Metrics.PhaseMilliseconds = run?.Timings() ?? snapshot.Metrics.PhaseMilliseconds;
             SnapshotStore.Complete(directory, snapshot, cancellation, false);
             entries.Add("crossreferences.json");
             foreach (var artifact in snapshot.Artifacts.Where(a => a.RelativePath != null)) entries.Add(artifact.RelativePath);
-            return new PackageResult { ArchivePath = CreateArchive(directory, Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + ".zip", entries, cancellation, snapshot.Metrics), Snapshot = snapshot };
+            return new PackageResult { ArchivePath = CreateArchive(directory, Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + ".zip", entries, cancellation, snapshot.Metrics, run, snapshot.Artifacts.Where(a => a.RelativePath != null).ToDictionary(a => a.RelativePath, a => a.Sha256)), Snapshot = snapshot };
         }
         public static void WriteText(string directory, string relativePath, string content)
         {
             using (var stream = new FileStream(ExportPaths.Resolve(directory, relativePath), FileMode.CreateNew, FileAccess.Write))
             using (var writer = new StreamWriter(stream, new UTF8Encoding(false))) writer.Write(content);
         }
-        public static string CreateArchive(string directory, string destination, IEnumerable<string> relativePaths, CancellationToken cancellation, ExportMetrics metrics = null)
+        public static string CreateArchive(string directory, string destination, IEnumerable<string> relativePaths, CancellationToken cancellation, ExportMetrics metrics = null, ExportRun run = null, IReadOnlyDictionary<string, string> expectedHashes = null)
         {
             // Publish only a closed, complete archive. Never replace an existing destination.
             var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".partial";
             bool owned = false;
+            using (var archiveScope = run?.Begin("ZIP.Compress", "ZipCompression", "Snapshot", "ZIP", destination))
+            {
             try
             {
                 cancellation.ThrowIfCancellationRequested();
@@ -88,13 +107,19 @@ namespace TiaAnalyzer.Export
                             var entry = archive.CreateEntry(relative, CompressionLevel.Optimal);
                             using (var input = File.OpenRead(source))
                             using (var target = entry.Open())
+                            using (var sha = System.Security.Cryptography.SHA256.Create())
                             {
                                 int count;
                                 while ((count = input.Read(buffer, 0, buffer.Length)) != 0)
                                 {
                                     cancellation.ThrowIfCancellationRequested();
-                                    target.Write(buffer, 0, count);
+                                    target.Write(buffer, 0, count); sha.TransformBlock(buffer, 0, count, buffer, 0);
                                 }
+                                sha.TransformFinalBlock(new byte[0], 0, 0);
+                                string expected;
+                                if (expectedHashes != null && expectedHashes.TryGetValue(relative, out expected) &&
+                                    BitConverter.ToString(sha.Hash).Replace("-", "").ToLowerInvariant() != expected)
+                                    throw new InvalidDataException("XML cambiato durante la compressione: " + relative);
                             }
                         }
                         if (metrics != null)
@@ -108,11 +133,15 @@ namespace TiaAnalyzer.Export
                     }
                 }
                 cancellation.ThrowIfCancellationRequested();
+                using (var flush = new FileStream(temporary, FileMode.Open, FileAccess.Write)) flush.Flush(true);
                 File.Move(temporary, destination);
                 owned = false;
+                archiveScope?.Success();
                 return destination;
             }
+            catch (Exception ex) { archiveScope?.Fail(ex); throw; }
             finally { if (owned && File.Exists(temporary)) File.Delete(temporary); }
+            }
         }
         public static string Text(string value)
         {
@@ -139,6 +168,8 @@ namespace TiaAnalyzer.Export
             result.AppendLine(snapshot.IsDemo ? "**DEMO / dati sintetici**" : "Dati di engineering offline / TIA Portal V21");
             if (snapshot.Selection != null) result.Append("\n**PACCHETTO MIRATO**: ").Append(snapshot.Selection.IncludedArtifacts).Append(" di ")
                 .Append(snapshot.Selection.TotalArtifacts).Append(" oggetti; query ").AppendLine(Text(snapshot.Selection.Query) + ". Inventario completo in inventory.json.");
+            result.Append("\nStato raccolta: ").AppendLine(Text(snapshot.AcquisitionState ?? "Legacy V0.9 / consultare esiti"));
+            result.Append("Modalità: ").AppendLine(Text(snapshot.ExportMode ?? "Legacy"));
             result.Append("\nAcquisizione UTC: ").AppendLine(Text(snapshot.CreatedUtc));
             result.Append("\nEsportati: ").Append(snapshot.Artifacts.Count(a => a.Status == "Exported"))
                 .Append(". Interfacce protette: ").Append(snapshot.Artifacts.Count(a => a.Status == "InterfaceOnly"))

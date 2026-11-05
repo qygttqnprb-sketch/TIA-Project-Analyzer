@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../TiaAnalyzer.App/TiaAnalyzer.App.csproj" /></ItemGroup>
   <ItemGroup>
+    <Compile Include="../TiaAnalyzer.Checks/ReliabilityChecks.cs" Link="ReliabilityChecks.cs" />
     <Compile Include="../TiaAnalyzer.Checks/GraphChecks.cs" Link="GraphChecks.cs" />
     <Compile Include="../TiaAnalyzer.Checks/TestFiles.cs" Link="TestFiles.cs" />
     <Compile Include="../TiaAnalyzer.Checks/OfflineChecks.cs" Link="OfflineChecks.cs" />

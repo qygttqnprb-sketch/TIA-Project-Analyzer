@@ -63,7 +63,24 @@ namespace TiaAnalyzer.Openness
                 var exporter = attached as IPlcExportSession;
                 if (exporter == null) throw new InvalidOperationException("Collegare una sessione con esportazione PLC disponibile.");
                 var timer = System.Diagnostics.Stopwatch.StartNew();
-                var snapshot = exporter.ExportPlc(directory, progress, cancellation, options);
+                ExportSnapshot snapshot;
+                try { snapshot = exporter.ExportPlc(directory, progress, cancellation, options); }
+                catch (Exception ex)
+                {
+                    var checkpointPath = System.IO.Path.Combine(directory, "checkpoint.json");
+                    try
+                    {
+                        if (System.IO.File.Exists(checkpointPath))
+                        {
+                            var checkpoint = CheckpointStore.Read(directory, false);
+                            checkpoint.State = ex is OperationCanceledException ? "Cancelled" : "Incomplete";
+                            CheckpointStore.Write(checkpointPath, checkpoint);
+                        }
+                    }
+                    catch (Exception checkpointError) { throw new AggregateException("Export fallito e stato checkpoint non aggiornabile.", ex, checkpointError); }
+                    throw;
+                }
+                snapshot.Metrics.PhaseMilliseconds = options?.Run?.Timings() ?? snapshot.Metrics.PhaseMilliseconds;
                 snapshot.Metrics.ExportMilliseconds = timer.ElapsedMilliseconds;
                 snapshot.Metrics.CrossReferenceCount = snapshot.CrossReferences.Count;
                 return snapshot;

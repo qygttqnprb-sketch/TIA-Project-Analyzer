@@ -31,19 +31,25 @@ namespace TiaAnalyzer.Openness
                 if (disposed) throw new ObjectDisposedException(nameof(DemoSession));
                 var writer = new PlcExportWriter(directory, true, progress, cancellation, options) { SourceIdentity = "synthetic-conveyor-v1", ApiIdentity = "DEMO-XML-v1" };
                 writer.Snapshot.Components.AddRange(ReadComponents());
-                foreach (var document in DemoDocuments.Create())
+                foreach (var document in writer.Enumerate("DEMO.Documents", "synthetic", () => DemoDocuments.Create()))
                 {
+                    writer.Plan("DEMO Linea confezionamento", "PLC_Conveyor", document.Group, document.Name, document.Kind, () =>
+                    {
                     var artifact = writer.Write("DEMO Linea confezionamento", "PLC_Conveyor", document.Group, document.Name, document.Kind,
                         document.Language, false, file => File.WriteAllText(file.FullName, document.Xml, new System.Text.UTF8Encoding(false)),
                         readStamp: document.Kind == "TagTable" ? (Func<ExportStamp>)null : () => new ExportStamp
-                        { Token = ExportPaths.Hash(document.Xml), Fingerprints = new List<ObjectFingerprint> { new ObjectFingerprint { Kind = "DemoXml", Value = ExportPaths.Hash(document.Xml) } } });
+                        { ReliableForXml = true, Token = ExportPaths.Hash(document.Xml), Fingerprints = new List<ObjectFingerprint> { new ObjectFingerprint { Kind = "DemoXml", Value = ExportPaths.Hash(document.Xml) } } });
                     artifact.CrossReferencesStatus = writer.CaptureCrossReferences ? "Demo" : "NotRequested";
                     if (writer.CaptureCrossReferences && document.Name == "ConveyorControl")
+                    writer.Call("DEMO.CrossReferences", "CrossReferences", document.Name, document.Kind, document.Group, () =>
+                    {
                         foreach (var name in new[] { "SafetyOK", "DriveReady", "JamDetected", "MotorRun" })
                             writer.Snapshot.CrossReferences.Add(new PlcCrossReference { QueriedArtifactId = artifact.Id, Project = artifact.Project, Plc = artifact.Plc,
                                 SourceName = name, ReferenceName = artifact.Name, Location = "Rete 1", Access = name == "MotorRun" ? "Write" : "Read", Provider = "DEMO" });
+                    });
+                    });
                 }
-                return writer.Snapshot;
+                return writer.ExecutePlan();
             }
         }
     }

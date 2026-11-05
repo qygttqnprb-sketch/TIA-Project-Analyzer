@@ -24,7 +24,7 @@ internal static class PackageChecks
             var zip = PackageWriter.Build(directory, snapshot, "Perché il motore è fermo?", new PackageDiagnostics(), CancellationToken.None);
             using (var archive = ZipFile.OpenRead(zip))
             {
-                check(archive.Entries.Count == 29 && archive.GetEntry("README.md") != null && archive.GetEntry("analysis.json") != null &&
+                check(archive.Entries.Count == 30 && archive.GetEntry("export-inventory.json") != null && archive.GetEntry("README.md") != null && archive.GetEntry("analysis.json") != null &&
                     archive.GetEntry("writers.json") != null && archive.GetEntry("writers.md") != null &&
                     archive.GetEntry("metrics.json") != null && archive.GetEntry("crossreferences.json") != null && archive.GetEntry("unrelated-secret.txt") == null,
                     "ZIP contains only declared XML and package documents");

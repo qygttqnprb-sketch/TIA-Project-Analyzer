@@ -1,8 +1,22 @@
-# TIA Project Analyzer · V0.9
+# TIA Project Analyzer · V1.0 — Export Reliability & Performance
 
 Applicazione Windows WPF, C# 7.3, .NET Framework 4.8, x64 per esportare e analizzare
 in sola lettura il software PLC di progetti Siemens TIA Portal V21 già aperti.
 La modalità demo usa esclusivamente dati sintetici.
+
+## Novità V1.0
+
+Il blocco di circa 12 ore dopo l'ultimo XML FC5 completato non ha una causa dimostrata. La nuova versione registra l'operazione prima della sua esecuzione, compresi iteratori, fingerprint e cross-reference, e mantiene UI/tempi/watchdog indipendenti dal worker Siemens.
+
+- Log persistente `operations.jsonl`, ID export e avvisi a 30/120/300 secondi.
+- XML su staging `.partial`, pubblicazione atomica e checkpoint per oggetto.
+- Ripresa verso una cartella nuova: identità/prova progetto, API, fingerprint affidabile e SHA256 obbligatori; in assenza di prove si riesporta.
+- Modalità **Rapida**, **Completa** e **Mirata** con copertura ed esclusioni dichiarate. I pacchetti V0.9 restano leggibili.
+- Otto fasi misurate separatamente e benchmark ripetibile su dati sintetici.
+
+La copertura dei fingerprint reali sull'intero XML non è attestata: l'adapter V21 raccoglie i valori per diagnosi ma **non li considera sufficienti per il riuso automatico**. La nuova parte Siemens necessita di compilazione/prova Windows. I risultati Windows della V0.9 restano storici, non verificano V1.0.
+
+Vedere [diagnosi e formato di log/checkpoint](docs/EXPORT-RELIABILITY.md), [checklist Windows V1.0](docs/WINDOWS-V1.0-CHECKLIST.md) e [validazione cloud del 5 novembre](docs/VALIDATION-2026-11-05.md).
 
 ## Funzioni
 
@@ -51,6 +65,8 @@ Eseguibile Release: `TiaAnalyzer.App\bin\x64\Release\TiaAnalyzer.App.exe`.
 
 ## Uso
 
+Scegliere **Rapida** per una prima raccolta XML senza cross-reference/fingerprint/analisi logica opzionale, **Completa** per tutte le fasi, **Mirata** per nomi/ID esatti separati da `;`. La Mirata pubblica solo i selezionati con inventario/esclusioni; il precedente filtro semantico V0.9 resta separato e richiede Completa. Per riprendere indicare la cartella precedente con checkpoint: la destinazione resta nuova. Attendere il ritorno dell’API se l’annullamento è pendente; non forzare thread o processo TIA.
+
 1. Verificare l'ambiente e il gruppo Openness. Se manca, seguire le
    [indicazioni IT](docs/OPENNESS-AUTHORIZATION.md), poi rifare l'accesso a Windows.
 2. Aprire manualmente un progetto di prova in TIA V21 con PLC offline.
@@ -87,7 +103,7 @@ dotnet run --project TiaAnalyzer.Checks/TiaAnalyzer.Checks.csproj -- --demo-pack
 
 ## Stato e limiti
 
-L'adapter reale compila contro Base/Step7 V21 installate; WPF/net48 è verificato in demo.
+La V0.9 è stata compilata contro Base/Step7 V21 e verificata in demo WPF/net48 sul PC Windows. Per le modifiche V1.0 questa verifica Windows va ripetuta.
 **Attach ed export reali restano da provare con un progetto di prova autorizzato aperto in TIA.**
 Build e dati sintetici non verificano il contenuto di un PLC reale.
 

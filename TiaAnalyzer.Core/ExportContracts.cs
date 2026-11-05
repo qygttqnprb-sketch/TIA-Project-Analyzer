@@ -59,6 +59,14 @@ namespace TiaAnalyzer.Core
         public List<string> Notes { get; set; } = new List<string>();
         [DataMember]
         public PackageSelection Selection { get; set; }
+        [DataMember(EmitDefaultValue = false)]
+        public string AcquisitionState { get; set; }
+        [DataMember(EmitDefaultValue = false)]
+        public string ExportMode { get; set; }
+        [DataMember(EmitDefaultValue = false)]
+        public string ExportId { get; set; }
+        [DataMember(EmitDefaultValue = false)]
+        public List<ExportArtifact> Inventory { get; set; }
         // Recorded separately in metrics.json, after the archive payload is written.
         public ExportMetrics Metrics { get; set; } = new ExportMetrics();
     }

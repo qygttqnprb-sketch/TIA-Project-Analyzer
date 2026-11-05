@@ -46,7 +46,7 @@ namespace TiaAnalyzer.Export
                             if (warning != null) { snapshot.Metrics.CacheWarnings++; snapshot.Notes.Add(warning); }
                             var single = new ExportSnapshot { Artifacts = new List<ExportArtifact> { artifact }, IsDemo = snapshot.IsDemo };
                             fragment = new AnalysisFragment { Version = AnalysisCache.ParserVersion,
-                                Analysis = AnalyzeUncached(directory, single, cancellation, options.IncludeNetworkXml), ContentHash = artifact.ContentSha256,
+                                Analysis = AnalyzeUncached(directory, single, cancellation, options.IncludeNetworkXml, null, options.Run), ContentHash = artifact.ContentSha256,
                                 ContentHashAlgorithm = artifact.ContentHashAlgorithm };
                             if (cache != null && fragment.Analysis.Blocks.Count == 1 && !fragment.Analysis.Warnings.Any(w => w.Contains("analisi incompleta")))
                                 try { cache.Save(directory, artifact, hash, options.IncludeNetworkXml, fragment, cancellation); }
@@ -62,7 +62,8 @@ namespace TiaAnalyzer.Export
                     ResolveDependencies(result);
                     result.Warnings = result.Warnings.Distinct(StringComparer.Ordinal).ToList();
                 }
-                CompleteAnalysis(result, snapshot, cancellation);
+                if (options?.Run == null) CompleteAnalysis(result, snapshot, cancellation);
+                else options.Run.Call("Logic.ResolveAndWriteIndex", "LogicAnalysis", "Snapshot", "Analysis", directory, () => CompleteAnalysis(result, snapshot, cancellation));
                 return result;
             }
             finally
@@ -87,7 +88,7 @@ namespace TiaAnalyzer.Export
             result.Writes = WriteAnalyzer.Analyze(result, cancellation);
         }
         private static ProjectAnalysis AnalyzeUncached(string directory, ExportSnapshot snapshot, CancellationToken cancellation, bool includeXml,
-            Func<ExportArtifact, XDocument> verifiedLoad = null)
+            Func<ExportArtifact, XDocument> verifiedLoad = null, ExportRun run = null)
         {
             var analysis = new ProjectAnalysis();
             foreach (var artifact in snapshot.Artifacts.Where(a => a.RelativePath != null && a.Status != "Failed"))
@@ -95,9 +96,12 @@ namespace TiaAnalyzer.Export
                 cancellation.ThrowIfCancellationRequested();
                 // Verified archive load failures must abort the open, not silently publish a partial context.
                 var verified = verifiedLoad == null ? null : verifiedLoad(artifact);
+                ExportRun.Operation logic = null;
                 try
                 {
-                    var document = verified ?? Load(ExportPaths.Resolve(directory, artifact.RelativePath));
+                    var document = verified ?? (run == null ? Load(ExportPaths.Resolve(directory, artifact.RelativePath)) :
+                        run.Call("XML.Parse", "XmlParsing", artifact.Name, artifact.Kind, artifact.RelativePath, () => Load(ExportPaths.Resolve(directory, artifact.RelativePath))));
+                    logic = run?.Begin("Logic.Object", "LogicAnalysis", artifact.Name, artifact.Kind, artifact.RelativePath);
                     artifact.ContentSha256 = XmlEvidence.Hash(document, true); artifact.ContentHashAlgorithm = "xml-tree-v2";
                     var block = new BlockAnalysis { ArtifactId = artifact.Id, Name = artifact.Name, File = artifact.RelativePath,
                         Project = artifact.Project, Plc = artifact.Plc, Unit = Unit(artifact.Group), Kind = artifact.Kind };
@@ -157,14 +161,18 @@ namespace TiaAnalyzer.Export
                     if (artifact.Protected) analysis.Warnings.Add(artifact.Name + ": interfaccia protetta, logica interna non disponibile.");
                     if (block.Networks.Count == 0 && new[] { "OB", "FB", "FC" }.Contains(artifact.Kind))
                         analysis.Warnings.Add(artifact.Name + ": nessuna rete leggibile; non dedurre l'assenza di logica.");
+                    logic?.Success();
                 }
                 catch (Exception ex) when (ex is XmlException || ex is IOException || ex is UnauthorizedAccessException || ex is RegexMatchTimeoutException)
                 {
+                    logic?.Fail(ex);
                     analysis.Warnings.Add(artifact.RelativePath + ": analisi incompleta: " + ex.Message);
                 }
+                finally { logic?.Dispose(); }
             }
-            SclLogicAnalyzer.Parse(analysis, cancellation);
-            ResolveDependencies(analysis);
+            if (run == null) { SclLogicAnalyzer.Parse(analysis, cancellation); ResolveDependencies(analysis); }
+            else run.Call("Logic.SCLAndDependencies", "LogicAnalysis", "Snapshot", "Analysis", directory,
+                () => { SclLogicAnalyzer.Parse(analysis, cancellation); ResolveDependencies(analysis); });
             analysis.Warnings.Add("Riferimenti XML e candidati SCL sono evidenze statiche; i cross-reference Siemens, quando disponibili, sono conservati separatamente.");
             analysis.Warnings.Add("Il testo SCL è una ricostruzione dei token: per sintassi non riconosciuta, accessi indicizzati e multi-istanze fare riferimento al NetworkSource XML originale.");
             analysis.Warnings.Add("LAD/FBD: solo il sottoinsieme booleano dichiarato in copertura. GRAPH, timer e fronti richiedono l'XML completo; nessun valore runtime disponibile.");

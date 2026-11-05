@@ -17,6 +17,11 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--reliability-only")
+        {
+            try { OpennessRuntime.Configure(); ReliabilityChecks.Run(Require).GetAwaiter().GetResult(); Console.WriteLine("Export reliability checks passed on net48 with synthetic data; no Siemens connection tested."); return 0; }
+            catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+        }
         if (args.Length == 1 && args[0] == "--graph-only")
         {
             try { OpennessRuntime.Configure(); GraphChecks.Run(Require); Console.WriteLine("Graph and writer checks passed on net48; no TIA project attached."); return 0; }

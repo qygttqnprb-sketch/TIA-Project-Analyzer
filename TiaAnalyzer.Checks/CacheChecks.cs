@@ -31,7 +31,7 @@ internal static class CacheChecks
                 Directory.GetFiles(secondDir, "*.xml", SearchOption.AllDirectories).Length == 6, "compact reports retain all original XML in every snapshot");
             check(second.CrossReferences.Count == 4 && second.CrossReferences.All(r => r.Provider == "DEMO") &&
                 XmlProjectAnalyzer.Search(secondAnalysis, "MotorRun").Any(s => s.Access == "Write"), "fresh demo cross-references preserve access and provenance on a cache hit");
-            var cached = Directory.GetFiles(Path.Combine(options.CacheDirectory, "xml-v1"), "*.blob").First();
+            var cached = Directory.GetFiles(Path.Combine(options.CacheDirectory, "xml-v2"), "*.blob").First();
             File.WriteAllText(cached, "corrupted");
             var recoveryDir = Path.Combine(root, "recovery");
             var recovery = await service.ExportPlcAsync(recoveryDir, null, CancellationToken.None, options);
@@ -65,12 +65,12 @@ internal static class CacheChecks
                 check(observed && !File.Exists(bad), "cancelled cache restore cleans partial output and propagates cancellation");
             }
             int exports = 0, stamps = 0;
-            Func<ExportStamp> stable = () => new ExportStamp { Token = "old", Fingerprints = new List<ObjectFingerprint> { new ObjectFingerprint { Kind = "Code", Value = "old" } } };
+            Func<ExportStamp> stable = () => new ExportStamp { ReliableForXml = true, Token = "old", Fingerprints = new List<ObjectFingerprint> { new ObjectFingerprint { Kind = "Code", Value = "old" } } };
             var originalWriter = new PlcExportWriter(Path.Combine(root, "stamp-a"), true, null, CancellationToken.None, options) { ApiIdentity = "test", SourceIdentity = "test" };
             originalWriter.Write("P", "PLC", "Blocks", "FB", "FB", "SCL", false, f => { exports++; File.WriteAllText(f.FullName, "<old/>"); }, readStamp: stable);
             var changedWriter = new PlcExportWriter(Path.Combine(root, "stamp-b"), true, null, CancellationToken.None, options) { ApiIdentity = "test", SourceIdentity = "test" };
             changedWriter.Write("P", "PLC", "Blocks", "FB", "FB", "SCL", false, f => { exports++; File.WriteAllText(f.FullName, "<fresh/>"); }, readStamp: () =>
-                new ExportStamp { Token = ++stamps == 1 ? "old" : "new" });
+                new ExportStamp { ReliableForXml = true, Token = ++stamps == 1 ? "old" : "new" });
             check(exports == 2 && !changedWriter.Snapshot.Artifacts[0].ReusedXml && changedWriter.Snapshot.Notes.Count > 0,
                 "a fingerprint changed during reuse forces a fresh export");
             var metricsZip = PackageWriter.Build(recoveryDir, recovery, "", new PackageDiagnostics(), CancellationToken.None);

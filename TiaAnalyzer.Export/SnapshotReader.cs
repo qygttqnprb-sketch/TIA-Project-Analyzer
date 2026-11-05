@@ -48,6 +48,7 @@ namespace TiaAnalyzer.Export
                 }, cancellation);
                 snapshot.Metrics.AnalysisMilliseconds = timer.ElapsedMilliseconds;
                 snapshot.Metrics.ManagedBytesAfter = GC.GetTotalMemory(false);
+                if (snapshot.AcquisitionState != null && snapshot.AcquisitionState != "Complete") result.Warnings.Add("Stato raccolta: " + snapshot.AcquisitionState + "; nessuna completezza globale dichiarata.");
                 var failed = snapshot.Artifacts.Count(a => a.Status == "Failed");
                 var interfaces = snapshot.Artifacts.Count(a => a.Status == "InterfaceOnly");
                 if (failed > 0) result.Warnings.Add(failed + " oggetti dichiarati Failed: contenuto non disponibile.");

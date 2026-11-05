@@ -63,6 +63,10 @@ internal static class AnalysisChecks
             Add(writer, "PLC_A", "Blocks", "ChildDB", "InstanceDB", idb);
             writer.Write("P", "PLC_A", "Blocks", "RejectedDtd", "FB", "SCL", false,
                 f => File.WriteAllText(f.FullName, "<!DOCTYPE Document [<!ENTITY x SYSTEM 'file:///must-not-read'>]><Document>&x;</Document>"));
+            check(writer.Snapshot.Artifacts.Single(a => a.Name == "RejectedDtd").Status == "Failed", "DTD rejected before checkpoint publication");
+            // Exercise the independent parser guard with an externally supplied local XML.
+            File.WriteAllText(Path.Combine(fixtureDir, "parser-dtd.xml"), "<!DOCTYPE Document [<!ENTITY x SYSTEM 'file:///must-not-read'>]><Document>&x;</Document>");
+            writer.Snapshot.Artifacts.Add(new ExportArtifact { Id = ExportPaths.Identity("parser-dtd"), Project = "P", Plc = "PLC_A", Group = "Blocks", Name = "ParserDtd", Kind = "FB", Language = "SCL", Status = "Exported", RelativePath = "parser-dtd.xml" });
             var analysis = XmlProjectAnalyzer.Analyze(fixtureDir, writer.Snapshot, CancellationToken.None);
             var caller = analysis.Blocks.Single(b => b.Name == "Caller");
             check(caller.Networks[0].Source.Contains("#Allowed:=#Limit;") && caller.Networks[0].Source.Contains("#Allowed:=12;"), "documented SCL local constants and literal values are reconstructed without type-name contamination");
@@ -76,7 +80,7 @@ internal static class AnalysisChecks
             check(analysis.Dependencies.Any(d => d.TargetName == "Duplicate" && d.Resolution == "Ambiguous" && d.TargetId == null), "ambiguous dependencies remain unresolved");
             check(analysis.Dependencies.Any(d => d.Relation == "InstanceOf" && d.TargetName == "FBChild" && d.Resolution == "Resolved"), "instance DB dependency is linked to its FB");
             check(analysis.Dependencies.Any(d => d.Relation == "Type" && d.TargetName == "MotorState" && d.Resolution == "Resolved"), "interface datatype reference resolves to the PLC UDT");
-            check(analysis.Warnings.Any(w => w.Contains("RejectedDtd")), "DTD and external entities are rejected and reported without aborting other blocks");
+            check(analysis.Warnings.Any(w => w.Contains("parser-dtd")), "DTD and external entities are rejected and reported without aborting other blocks");
             var masked = XmlProjectAnalyzer.MaskCommentsAndStrings("(* nested (* \"Fake\"(); *) *)\n'\"Fake\"()'\n\"Real//name\"(); // \"Fake\"()");
             check(!masked.Contains("Fake") && masked.Contains("Real//name"), "SCL masking respects nested comments strings and quoted identifiers");
             await ComparisonTests(root, demoDir, demo, service, check);
@@ -94,6 +98,8 @@ internal static class AnalysisChecks
         var main = after.Artifacts.Single(a => a.Name == "Main");
         var mainPath = ExportPaths.Resolve(afterDir, main.RelativePath);
         var doc = XDocument.Load(mainPath); doc.Root.AddFirst(new XElement("DocumentInfo", new XElement("ExportTime", "2099-01-01"))); doc.Save(mainPath);
+        // Intentional synthetic baseline for comparison; production completion rejects unrecorded mutations.
+        motor.Sha256 = SnapshotStore.FileHash(motorPath); main.Sha256 = SnapshotStore.FileHash(mainPath);
         var removed = after.Artifacts.Single(a => a.Name == "MotorState"); after.Artifacts.Remove(removed);
         var extra = new ExportArtifact { Id = ExportPaths.Hash("new-block"), Project = "DEMO Linea confezionamento", Plc = "PLC_Conveyor", Group = "Blocks", Name = "NewBlock", Kind = "FC", Status = "Exported", RelativePath = "new.xml" };
         File.WriteAllText(ExportPaths.Resolve(afterDir, extra.RelativePath), "<Document/>"); after.Artifacts.Add(extra);

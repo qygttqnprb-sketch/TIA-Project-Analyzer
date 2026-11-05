@@ -1,3 +1,5 @@
+> Aggiornamento V1.0: questa pagina descrive anche il comportamento storico V0.9. La cache XML ora usa `xml-v2` e richiede prova del progetto e copertura del fingerprint attestata per l'intero XML. Nel reale V21 tale copertura non è ancora attestata: si riesporta. Vedere [EXPORT-RELIABILITY.md](EXPORT-RELIABILITY.md) per regole correnti, modalità e misure.
+
 # Riferimenti, cache e metriche · V0.6
 
 La pipeline separa chiamate Siemens e calcolo locale:

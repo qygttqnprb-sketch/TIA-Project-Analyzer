@@ -1,4 +1,4 @@
-<Window x:Class="TiaAnalyzer.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="TIA Project Analyzer · V0.9" Width="1180" Height="900" MinWidth="900" MinHeight="650" Background="#10171F" Foreground="#E5EDF5" FontFamily="Segoe UI" WindowStartupLocation="CenterScreen">
+<Window x:Class="TiaAnalyzer.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="TIA Project Analyzer · V1.0" Width="1180" Height="900" MinWidth="900" MinHeight="650" Background="#10171F" Foreground="#E5EDF5" FontFamily="Segoe UI" WindowStartupLocation="CenterScreen">
  <Window.Resources>
   <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
   <Style TargetType="Button"><Setter Property="Foreground" Value="#E5EDF5"/><Setter Property="Background" Value="#263747"/><Setter Property="Padding" Value="18,12"/><Setter Property="Margin" Value="0,0,12,0"/><Setter Property="Cursor" Value="Hand"/>
@@ -7,7 +7,7 @@
   <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="#192430"/><Setter Property="BorderBrush" Value="#2C3D4E"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="8"/><Setter Property="Padding" Value="22"/></Style>
  </Window.Resources>
  <Grid Margin="28"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <Grid Margin="0,0,0,24"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="TIA / PROJECT ANALYZER" Foreground="#37D5BC" FontWeight="Bold"/><TextBlock Text="Project Analyzer" FontSize="30" FontWeight="SemiBold" Margin="0,6,0,4"/><TextBlock Text="V0.9 / Siemens TIA Portal V21 · Export e analisi statica" Foreground="#A1B2C4"/></StackPanel><Border Grid.Column="1" Background="#203D3D" CornerRadius="5" Padding="16,10" VerticalAlignment="Center"><TextBlock Text="● SOLA LETTURA" Foreground="#65E1C8" FontWeight="Bold"/></Border></Grid>
+  <Grid Margin="0,0,0,24"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="TIA / PROJECT ANALYZER" Foreground="#37D5BC" FontWeight="Bold"/><TextBlock Text="Project Analyzer" FontSize="30" FontWeight="SemiBold" Margin="0,6,0,4"/><TextBlock Text="V1.0 / Siemens TIA Portal V21 · Export e analisi statica" Foreground="#A1B2C4"/></StackPanel><Border Grid.Column="1" Background="#203D3D" CornerRadius="5" Padding="16,10" VerticalAlignment="Center"><TextBlock Text="● SOLA LETTURA" Foreground="#65E1C8" FontWeight="Bold"/></Border></Grid>
   <ScrollViewer x:Name="MainScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
    <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel><DockPanel><TextBlock Text="01   AMBIENTE DI ESECUZIONE" FontWeight="Bold" Foreground="#A1B2C4"/><CheckBox x:Name="MockMode" Content="Modalità dimostrativa" Foreground="#E5EDF5" HorizontalAlignment="Right" IsChecked="{Binding IsDemo}" IsEnabled="{Binding CanChangeMode}"/></DockPanel><TextBlock x:Name="EnvironmentStatus" Text="{Binding EnvironmentStatus}" FontSize="22" FontWeight="SemiBold" Margin="0,16,0,6"/><TextBlock Text="Rilevamento automatico delle librerie installate. La verifica dei metadati non collega né modifica progetti TIA." Foreground="#A1B2C4"/><TextBlock x:Name="LibraryPath" Text="{Binding LibraryPath}" FontFamily="Consolas" FontSize="12" Foreground="#65E1C8" Margin="0,14,0,18"/><WrapPanel><Button x:Name="CheckButton" Content="Verifica disponibilità Openness" Command="{Binding CheckCommand}"/><TextBlock x:Name="LastCheck" Text="{Binding LastCheck}" VerticalAlignment="Center" Foreground="#A1B2C4"/></WrapPanel></StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,0,0,16"><StackPanel><TextBlock Text="02   RISULTATI DEI CONTROLLI" Foreground="#A1B2C4" FontWeight="Bold" Margin="0,0,0,12"/><ItemsControl x:Name="Checks" ItemsSource="{Binding Checks}"><ItemsControl.ItemTemplate><DataTemplate><Border BorderBrush="#2C3D4E" BorderThickness="0,0,0,1" Padding="0,12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="135"/><ColumnDefinition/></Grid.ColumnDefinitions><TextBlock Text="{Binding Status}" FontWeight="Bold"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="#65E1C8"/><Style.Triggers><DataTrigger Binding="{Binding Status}" Value="ERRORE"><Setter Property="Foreground" Value="#FF8C87"/></DataTrigger><DataTrigger Binding="{Binding Status}" Value="DA VERIFICARE"><Setter Property="Foreground" Value="#F4C574"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock><StackPanel Grid.Column="1"><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Detail}" Foreground="#A1B2C4" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/></StackPanel></Grid></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
@@ -34,18 +34,28 @@
     <TextBlock Text="Esporta blocchi, UDT e tabelle variabili dalle sessioni aperte. Ogni operazione crea una cartella nuova con manifest ed esiti. Nessuna modifica al progetto PLC." Foreground="#A1B2C4" Margin="0,0,0,12"/>
     <TextBlock Text="Cartella di destinazione" Foreground="#A1B2C4"/>
     <TextBox x:Name="ExportRoot" Text="{Binding ExportRoot, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanChangeMode}" Padding="10" Margin="0,6,0,12" AutomationProperties.Name="Cartella di destinazione esportazione"/>
+    <TextBlock Text="Modalità esportazione" Foreground="#A1B2C4"/>
+    <ComboBox ItemsSource="{Binding ExportModeLabels}" SelectedIndex="{Binding ExportModeIndex}" IsEnabled="{Binding CanChangeMode}" Foreground="#10171F" Padding="10" Margin="0,6,0,8" AutomationProperties.Name="Modalità esportazione"/>
+    <TextBlock Text="Mirata: nomi esatti o ID separati da punto e virgola (nessuna dipendenza implicita)" Foreground="#A1B2C4"/>
+    <TextBox Text="{Binding TargetObjects, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanChangeMode}" Padding="10" Margin="0,6,0,8" AutomationProperties.Name="Oggetti mirati"/>
+    <TextBlock Text="Ripresa opzionale: cartella precedente con checkpoint.json; si crea sempre una nuova destinazione" Foreground="#A1B2C4"/>
+    <TextBox Text="{Binding ResumeDirectory, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanChangeMode}" Padding="10" Margin="0,6,0,12" AutomationProperties.Name="Cartella checkpoint precedente"/>
     <TextBlock Text="Opzioni di raccolta e pacchetto" Foreground="#A1B2C4"/>
     <WrapPanel Margin="0,8,0,12" IsEnabled="{Binding CanChangeMode}">
      <CheckBox Content="Cache analisi" IsChecked="{Binding UseAnalysisCache}" Foreground="#E5EDF5" Margin="0,0,20,0"/>
      <CheckBox Content="Report compatti" IsChecked="{Binding CompactReports}" Foreground="#E5EDF5" Margin="0,0,20,0" ToolTip="Gli XML originali restano completi; si evita di duplicarli nei report."/>
      <CheckBox Content="Riusa XML con impronta invariata" IsChecked="{Binding ReuseXml}" Foreground="#E5EDF5" ToolTip="Opzionale. In assenza di un'impronta affidabile viene eseguito l'export completo. Disattivare per una raccolta completamente nuova."/>
     </WrapPanel>
-    <CheckBox Content="Crea ZIP mirato al simbolo/blocco seguente" IsChecked="{Binding FocusedPackage}" Foreground="#E5EDF5" IsEnabled="{Binding CanChangeMode}" Margin="0,0,0,8" ToolTip="La raccolta locale resta completa. Se la copertura è incerta vengono inclusi più oggetti del PLC interessato."/>
+    <CheckBox Content="Filtro semantico V0.9 sul simbolo/blocco seguente (solo raccolta Completa)" IsChecked="{Binding FocusedPackage}" Foreground="#E5EDF5" IsEnabled="{Binding CanChangeMode}" Margin="0,0,0,8" ToolTip="La raccolta locale resta completa. Se la copertura è incerta vengono inclusi più oggetti del PLC interessato."/>
     <TextBox Text="{Binding TraceQuery, UpdateSourceTrigger=PropertyChanged}" Padding="10" Margin="0,0,0,12" IsEnabled="{Binding CanChangeMode}" AutomationProperties.Name="Simbolo o blocco per pacchetto e traccia"/>
     <TextBlock Text="Domanda da includere nel pacchetto" Foreground="#A1B2C4" Margin="0,0,0,6"/>
     <TextBox x:Name="Question" Text="{Binding Question, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanChangeMode}" Padding="10" Margin="0,6,0,12" MinHeight="80" AcceptsReturn="True" TextWrapping="Wrap" AutomationProperties.Name="Domanda per l'analisi del progetto"/>
     <WrapPanel><Button x:Name="ExportXmlButton" Content="Esporta XML" Command="{Binding ExportXmlCommand}"/><Button x:Name="ExportZipButton" Content="Crea ZIP per ChatGPT" Command="{Binding ExportZipCommand}"/><Button x:Name="CancelExportButton" Content="Annulla operazione" Command="{Binding CancelExportCommand}"/></WrapPanel>
     <TextBlock x:Name="ExportStatus" Text="{Binding ExportStatus}" Foreground="#A1B2C4" FontSize="12" Margin="0,12,0,0"/>
+    <TextBlock Text="{Binding LiveExportStatus}" Foreground="#65E1C8" Margin="0,8,0,0"/>
+    <TextBlock Text="Ultimo checkpoint valido" Foreground="#A1B2C4" Margin="0,8,0,0"/>
+    <TextBlock Text="{Binding LastCheckpoint}" Foreground="#A1B2C4"/>
+    <ItemsControl ItemsSource="{Binding RecentExportEvents}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="#F4C574" FontSize="12" Margin="0,3"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
     <TextBlock Text="{Binding PerformanceSummary}" Foreground="#A1B2C4" FontSize="12" Margin="0,8,0,0"/>
     <TextBlock Text="{Binding LastZipPath}" Foreground="#65E1C8" Margin="0,12,0,0"/>
    </StackPanel></Border>
@@ -88,6 +98,6 @@
     <ItemsControl ItemsSource="{Binding LogEntries}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="#A1B2C4" FontFamily="Consolas" FontSize="12" Margin="0,3"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
    </StackPanel></Border>
   </StackPanel></ScrollViewer>
-  <TextBlock Grid.Row="2" Text="V0.9   /   Analisi offline · nessun valore runtime                         .NET Framework 4.8 • x64" Foreground="#8A9EB2" FontSize="12" Margin="0,18,0,0"/>
+  <TextBlock Grid.Row="2" Text="V1.0   /   Analisi offline · nessun valore runtime                         .NET Framework 4.8 • x64" Foreground="#8A9EB2" FontSize="12" Margin="0,18,0,0"/>
  </Grid>
 </Window>

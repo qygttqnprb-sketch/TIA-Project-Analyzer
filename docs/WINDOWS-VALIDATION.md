@@ -1,4 +1,6 @@
-# Verifica Windows · V0.9
+# Verifica Windows · V0.9 / V1.0
+
+Per le modifiche di affidabilità V1.0 eseguire anche [WINDOWS-V1.0-CHECKLIST.md](WINDOWS-V1.0-CHECKLIST.md). Le prove storiche V0.9 non certificano le nuove chiamate strumentate o la ripresa.
 
 Compilazione Siemens, WPF demo e progetto PLC reale sono verifiche distinte.
 

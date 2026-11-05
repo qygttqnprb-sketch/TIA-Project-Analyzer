@@ -2,8 +2,13 @@ using System.Collections.Generic;
 
 namespace TiaAnalyzer.Core
 {
+    public enum ExportMode { Full, Quick, Targeted }
     public sealed class ExportOptions
     {
+        public ExportMode Mode { get; set; } = ExportMode.Full;
+        public List<string> TargetObjects { get; set; } = new List<string>();
+        public string ResumeDirectory { get; set; }
+        public ExportRun Run { get; set; }
         public string CacheDirectory { get; set; }
         public bool ReuseUnchangedXml { get; set; }
         public bool CaptureCrossReferences { get; set; } = true;
@@ -16,6 +21,7 @@ namespace TiaAnalyzer.Core
     public sealed class ExportStamp
     {
         public string Token { get; set; }
+        public bool ReliableForXml { get; set; }
         public List<ObjectFingerprint> Fingerprints { get; set; } = new List<ObjectFingerprint>();
     }
     // Preserve Siemens source/reference/location semantics, including members for
@@ -39,6 +45,8 @@ namespace TiaAnalyzer.Core
     }
     public sealed class ExportMetrics
     {
+        public List<string> SkippedPhases { get; set; } = new List<string>();
+        public Dictionary<string, long> PhaseMilliseconds { get; set; } = new Dictionary<string, long>();
         public long ExportMilliseconds { get; set; }
         public long AnalysisMilliseconds { get; set; }
         public long DocumentsMilliseconds { get; set; }

@@ -24,6 +24,7 @@ internal static class Program
     }
     private static async Task Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--export-benchmark") { await ReliabilityChecks.Benchmark(args[1]); return; }
         if (args.Length == 2 && args[0] == "--demo-package") { await PackageChecks.GenerateDemo(args[1]); return; }
         try
         {
@@ -38,6 +39,7 @@ internal static class Program
             await NetworkChecks.Run(Check);
             GraphChecks.Run(Check);
             await OfflineChecks.Run(Check);
+            await ReliabilityChecks.Run(Check);
             Console.WriteLine(passed + " checks passed on .NET 10 with synthetic/fake data. No real TIA project attached. Run TiaAnalyzer.WpfChecks for net48/WPF.");
         }
         finally { foreach (var service in services) await service.ShutdownAsync(); }

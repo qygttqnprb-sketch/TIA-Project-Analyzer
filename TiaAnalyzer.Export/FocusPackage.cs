@@ -58,6 +58,7 @@ namespace TiaAnalyzer.Export
             plan.IncludedIds = selected.OrderBy(s => s, StringComparer.Ordinal).ToList();
             plan.Warnings.Add("Pacchetto mirato da una raccolta completa; gli oggetti esclusi sono elencati nell'inventario. Le reti dei chiamanti possono menzionare altri blocchi esclusi.");
             var subset = new ExportSnapshot { CreatedUtc = snapshot.CreatedUtc, IsDemo = snapshot.IsDemo, SchemaVersion = snapshot.SchemaVersion,
+                AcquisitionState = snapshot.AcquisitionState, ExportMode = snapshot.ExportMode, ExportId = snapshot.ExportId, Inventory = snapshot.Inventory,
                 Artifacts = snapshot.Artifacts.Where(a => selected.Contains(a.Id)).ToList(), Components = snapshot.Components, Issues = snapshot.Issues,
                 CrossReferences = (snapshot.CrossReferences ?? new List<PlcCrossReference>()).Where(r => selected.Contains(r.QueriedArtifactId)).ToList(),
                 Limitations = snapshot.Limitations.Concat(plan.Warnings).ToList(), Notes = snapshot.Notes, Metrics = snapshot.Metrics };
